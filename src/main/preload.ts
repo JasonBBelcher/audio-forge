@@ -9,6 +9,17 @@ const api = {
   audio: {
     analyzeBPM: (filePath: string) => ipcRenderer.invoke('audio:analyzeBPM', filePath),
     analyzeKey: (filePath: string) => ipcRenderer.invoke('audio:analyzeKey', filePath),
+    convertFormat: (filePath: string, outputPath: string, options?: object) =>
+      ipcRenderer.invoke('audio:convertFormat', filePath, outputPath, options),
+    trim: (filePath: string, outputPath: string, startSec: number, endSec: number) =>
+      ipcRenderer.invoke('audio:trim', filePath, outputPath, startSec, endSec),
+    normalize: (filePath: string, outputPath: string, options?: object) =>
+      ipcRenderer.invoke('audio:normalize', filePath, outputPath, options),
+    separateStems: (filePath: string, options?: object) =>
+      ipcRenderer.invoke('audio:separateStems', filePath, options),
+    fullAnalysis: (filePath: string) => ipcRenderer.invoke('audio:fullAnalysis', filePath),
+    getMetadata: (filePath: string) => ipcRenderer.invoke('audio:getMetadata', filePath),
+    analyzeWaveform: (filePath: string) => ipcRenderer.invoke('audio:analyzeWaveform', filePath),
   },
   projects: {
     getAll: () => ipcRenderer.invoke('projects:getAll'),

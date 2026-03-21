@@ -113,6 +113,12 @@ export class FileService {
     return rows.map((r) => this.rowToAsset(r));
   }
 
+  // Aliases for asset-related methods (used by assetHandlers)
+  listAssets = this.listFiles.bind(this);
+  searchAssets = this.searchFiles.bind(this);
+  deleteAsset = this.deleteFile.bind(this);
+  importAsset = this.importFile.bind(this);
+
   addTags(id: number, tags: string[]): void {
     const tagsStr = JSON.stringify(tags);
     this.tagsStmt.run(tagsStr, id);

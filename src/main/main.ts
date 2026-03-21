@@ -11,10 +11,21 @@ import { ProjectService } from './services/project.service.js';
 import { SettingsService } from './services/settings.service.js';
 import { QueueService } from './services/queue.service.js';
 import { HealthService } from './services/health.service.js';
+import { AudioService } from './services/audio.service.js';
+import { VideoService } from './services/video.service.js';
+import { FileService } from './services/file.service.js';
+import { SyncService } from './services/sync.service.js';
+import { PlatformService } from './services/platform.service.js';
+import { JobExecutor } from './services/job-executor.js';
 import { registerProjectHandlers } from './ipc/projectHandlers.js';
 import { registerSettingsHandlers } from './ipc/settingsHandlers.js';
 import { registerHealthHandlers } from './ipc/healthHandlers.js';
 import { registerJobHandlers } from './ipc/jobHandlers.js';
+import { registerAudioHandlers } from './ipc/audioHandlers.js';
+import { registerVideoHandlers } from './ipc/videoHandlers.js';
+import { registerAssetHandlers } from './ipc/assetHandlers.js';
+import { registerSyncHandlers } from './ipc/syncHandlers.js';
+import { registerPlatformHandlers } from './ipc/platformHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -27,12 +38,22 @@ const projectService = new ProjectService(db);
 const settingsService = new SettingsService(db);
 const queueService = new QueueService(db);
 const healthService = new HealthService();
+const audioService = new AudioService();
+const videoService = new VideoService();
+const fileService = new FileService(db, paths.media);
+const syncService = new SyncService(paths.database);
+const platformService = new PlatformService(paths.database);
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
 registerSettingsHandlers(ipcMain, settingsService);
 registerHealthHandlers(ipcMain, healthService);
 registerJobHandlers(ipcMain, queueService);
+registerAudioHandlers(ipcMain, audioService);
+registerVideoHandlers(ipcMain, videoService);
+registerAssetHandlers(ipcMain, fileService);
+registerSyncHandlers(ipcMain, syncService);
+registerPlatformHandlers(ipcMain, platformService);
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -204,9 +225,47 @@ ipcMain.handle('files:readAsArrayBuffer', async (_event, filePath: string) => {
   return buf;
 });
 
+// ─── Job Executor ─────────────────────────────────────────────────────────────
+
+let jobExecutor: JobExecutor | null = null;
+
+function setupJobExecutor(window: BrowserWindow): void {
+  // Create job handlers map with injected services
+  const jobHandlers = new Map<string, any>([
+    ['download-youtube', async (job: any, onProgress: Function) => {
+      // YouTube download handled via youtube:download IPC instead
+      throw new Error('YouTube downloads should use IPC handler directly');
+    }],
+    ['convert-audio', async (job: any, onProgress: Function) => {
+      const { inputPath, outputFormat, options } = job.payload;
+      return audioService.convertFormat(inputPath, outputFormat, options);
+    }],
+    ['analyze-audio', async (job: any, onProgress: Function) => {
+      const { filePath } = job.payload;
+      return audioService.fullAnalysis(filePath);
+    }],
+    ['separate-stems', async (job: any, onProgress: Function) => {
+      const { filePath, options } = job.payload;
+      return audioService.separateStems(filePath, options);
+    }],
+  ]);
+
+  // Create executor with emit callback to send events to renderer
+  jobExecutor = new JobExecutor(queueService, jobHandlers, (channel: string, data: unknown) => {
+    window.webContents.send(channel, data);
+  });
+
+  jobExecutor.start(2000);
+}
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  if (mainWindow) {
+    setupJobExecutor(mainWindow);
+  }
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
