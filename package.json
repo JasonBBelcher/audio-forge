@@ -1,0 +1,42 @@
+{
+  "name": "audioforge",
+  "version": "1.0.0",
+  "description": "Unified Music Production Platform",
+  "main": "dist/main/main.cjs",
+  "author": "Jason Belcher",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "build:main": "tsup src/main/main.ts src/main/preload.ts --outDir dist/main --format cjs --target node20 --clean --external electron",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "package": "npm run build && electron-builder",
+    "lint": "eslint src --ext .ts,.svelte",
+    "format": "prettier --write \"src/**/*.{ts,svelte,css,html}\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.0.0",
+    "electron-updater": "^6.3.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tsconfig/svelte": "^5.0.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "electron": "^34.0.0",
+    "electron-builder": "^26.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0",
+    "prettier-plugin-svelte": "^3.3.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  }
+}
