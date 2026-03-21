@@ -67,7 +67,12 @@ const api = {
   health: {
     getStatus: () => ipcRenderer.invoke('health:getStatus'),
   },
-  hardware: {},
+  hardware: {
+    list: () => ipcRenderer.invoke('hardware:list'),
+    getStatus: (id: string) => ipcRenderer.invoke('hardware:getStatus', id),
+    initialize: (id: string) => ipcRenderer.invoke('hardware:initialize', id),
+    teardown: (id: string) => ipcRenderer.invoke('hardware:teardown', id),
+  },
   midi: {},
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);

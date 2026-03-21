@@ -17,6 +17,7 @@ import { FileService } from './services/file.service.js';
 import { SyncService } from './services/sync.service.js';
 import { PlatformService } from './services/platform.service.js';
 import { JobExecutor } from './services/job-executor.js';
+import { AdapterRegistry } from './services/hardware-adapter.js';
 import { registerProjectHandlers } from './ipc/projectHandlers.js';
 import { registerSettingsHandlers } from './ipc/settingsHandlers.js';
 import { registerHealthHandlers } from './ipc/healthHandlers.js';
@@ -26,6 +27,7 @@ import { registerVideoHandlers } from './ipc/videoHandlers.js';
 import { registerAssetHandlers } from './ipc/assetHandlers.js';
 import { registerSyncHandlers } from './ipc/syncHandlers.js';
 import { registerPlatformHandlers } from './ipc/platformHandlers.js';
+import { registerHardwareHandlers } from './ipc/hardwareHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -43,6 +45,7 @@ const videoService = new VideoService();
 const fileService = new FileService(db, paths.media);
 const syncService = new SyncService(paths.database);
 const platformService = new PlatformService(paths.database);
+const adapterRegistry = new AdapterRegistry();
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -54,6 +57,7 @@ registerVideoHandlers(ipcMain, videoService);
 registerAssetHandlers(ipcMain, fileService);
 registerSyncHandlers(ipcMain, syncService);
 registerPlatformHandlers(ipcMain, platformService);
+registerHardwareHandlers(ipcMain, adapterRegistry);
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -230,6 +234,16 @@ ipcMain.handle('files:readAsArrayBuffer', async (_event, filePath: string) => {
 let jobExecutor: JobExecutor | null = null;
 
 function setupJobExecutor(window: BrowserWindow): void {
+  // Set up adapter registry context
+  adapterRegistry.setContext({
+    db,
+    mediaDir: paths.media,
+    tempDir: paths.temp,
+    emit: (channel: string, data: unknown) => {
+      window.webContents.send(channel, data);
+    },
+  });
+
   // Create job handlers map with injected services
   const jobHandlers = new Map<string, any>([
     ['download-youtube', async (job: any, onProgress: Function) => {
