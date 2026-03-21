@@ -57,6 +57,9 @@ const api = {
     list: () => ipcRenderer.invoke('platforms:list'),
     register: (config: object) => ipcRenderer.invoke('platforms:register', config),
     getHistory: (platformId: string) => ipcRenderer.invoke('platforms:getHistory', platformId),
+    soundcloud: {
+      connect: () => ipcRenderer.invoke('platforms:soundcloud:connect'),
+    },
   },
   assets: {
     list: () => ipcRenderer.invoke('assets:list'),

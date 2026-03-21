@@ -7,10 +7,14 @@
     status: 'authorized' | 'unauthorized';
   }
 
-  let platforms: Platform[] = [];
-  let isLoading: boolean = true;
-  let showConnectForm: boolean = false;
-  let newPlatformName: string = '';
+  let platforms: Platform[] = $state([]);
+  let isLoading: boolean = $state(true);
+  let showConnectForm: boolean = $state(false);
+  let newPlatformName: string = $state('');
+
+  // SoundCloud OAuth state
+  let isConnectingSoundCloud: boolean = $state(false);
+  let soundCloudError: string = $state('');
 
   onMount(async () => {
     isLoading = true;
@@ -59,6 +63,31 @@
       (window as any).audioforge.platforms.getHistory(platformId);
     }
   }
+
+  async function handleConnectSoundCloud() {
+    isConnectingSoundCloud = true;
+    soundCloudError = '';
+    try {
+      const result = await (window as any).audioforge.platforms.soundcloud.connect();
+      if (result && result.success) {
+        // Refresh platforms list
+        if ((window as any).audioforge?.platforms?.list) {
+          platforms = await (window as any).audioforge.platforms.list();
+        }
+      } else {
+        soundCloudError = result?.error || 'Connection failed';
+      }
+    } catch (error) {
+      console.error('Failed to connect SoundCloud:', error);
+      soundCloudError = `Error connecting SoundCloud: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    } finally {
+      isConnectingSoundCloud = false;
+    }
+  }
+
+  function isSoundCloudConnected(): boolean {
+    return platforms.some(p => p.name.toLowerCase() === 'soundcloud' && p.status === 'authorized');
+  }
 </script>
 
 <div class="platforms-view">
@@ -88,34 +117,62 @@
     </div>
   {/if}
 
-  <div class="connect-section">
-    {#if !showConnectForm}
-      <button onclick={handleConnectClick}>Connect Platform</button>
-    {:else}
-      <div class="connect-form">
-        <div class="form-group">
-          <label for="platform-name">Platform Name:</label>
-          <input
-            id="platform-name"
-            type="text"
-            bind:value={newPlatformName}
-            placeholder="Enter platform name"
-          />
+  <div class="soundcloud-section">
+    <h3>SoundCloud</h3>
+    <div class="soundcloud-card">
+      {#if isSoundCloudConnected()}
+        <div class="connected-status">
+          <span class="status-badge">Connected ✓</span>
         </div>
-        <div class="form-actions">
-          <button onclick={handleConnectSubmit}>Connect</button>
-          <button
-            onclick={() => {
-              showConnectForm = false;
-              newPlatformName = '';
-            }}
-            class="cancel"
-          >
-            Cancel
+      {:else}
+        <div class="disconnected-status">
+          <p>Connect your SoundCloud account to publish audio</p>
+          <button onclick={handleConnectSoundCloud} disabled={isConnectingSoundCloud} class="soundcloud-btn">
+            {#if isConnectingSoundCloud}
+              Connecting...
+            {:else}
+              Connect with SoundCloud
+            {/if}
           </button>
+          {#if soundCloudError}
+            <div class="error-message">{soundCloudError}</div>
+          {/if}
         </div>
-      </div>
-    {/if}
+      {/if}
+    </div>
+  </div>
+
+  <div class="other-platforms-section">
+    <h3>Other Platforms</h3>
+    <div class="connect-section">
+      {#if !showConnectForm}
+        <button onclick={handleConnectClick}>Connect Platform</button>
+      {:else}
+        <div class="connect-form">
+          <div class="form-group">
+            <label for="platform-name">Platform Name:</label>
+            <input
+              id="platform-name"
+              type="text"
+              bind:value={newPlatformName}
+              placeholder="Enter platform name"
+            />
+          </div>
+          <div class="form-actions">
+            <button onclick={handleConnectSubmit}>Connect</button>
+            <button
+              onclick={() => {
+                showConnectForm = false;
+                newPlatformName = '';
+              }}
+              class="cancel"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -304,5 +361,96 @@
 
   .form-actions .cancel:hover {
     background: rgba(255, 255, 255, 0.15);
+  }
+
+  .soundcloud-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .soundcloud-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .soundcloud-card {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+  }
+
+  .connected-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .status-badge {
+    padding: 6px 12px;
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .disconnected-status {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .disconnected-status p {
+    margin: 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .soundcloud-btn {
+    padding: 8px 16px;
+    background: #1db954;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-self: flex-start;
+  }
+
+  .soundcloud-btn:hover:not(:disabled) {
+    background: #1ed760;
+  }
+
+  .soundcloud-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .error-message {
+    padding: 8px 12px;
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    border-radius: 4px;
+    color: #f44336;
+    font-size: 11px;
+  }
+
+  .other-platforms-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .other-platforms-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
   }
 </style>
