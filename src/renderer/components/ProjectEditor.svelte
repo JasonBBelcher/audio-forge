@@ -25,6 +25,7 @@
   import SyncView from './SyncView.svelte';
   import PlatformsView from './PlatformsView.svelte';
   import FilesView from './FilesView.svelte';
+  import KoalaView from './KoalaView.svelte';
   import { onMount, onDestroy } from 'svelte';
 
   let project: Project | null = null;
@@ -556,6 +557,11 @@
       <!-- Files View -->
       {#if activeTab === 'files'}
       <FilesView />
+      {/if}
+
+      <!-- Koala View -->
+      {#if activeTab === 'koala'}
+      <KoalaView />
       {/if}
     </div>
   </div>

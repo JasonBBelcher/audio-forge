@@ -17,6 +17,7 @@
     { id: 'sync', label: 'Sync' },
     { id: 'platforms', label: 'Platforms' },
     { id: 'files', label: 'Files' },
+    { id: 'koala', label: 'Koala' },
   ];
 
   function handleTabClick(tabId: string) {
