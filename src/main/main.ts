@@ -20,6 +20,7 @@ import { JobExecutor } from './services/job-executor.js';
 import { MediaSyncService } from './services/media-sync.service.js';
 import { AdapterRegistry } from './services/hardware-adapter.js';
 import { KoalaService } from './services/koala.service.js';
+import { AnalysisPipelineService } from './services/analysis-pipeline.service.js';
 import { registerProjectHandlers } from './ipc/projectHandlers.js';
 import { registerSettingsHandlers } from './ipc/settingsHandlers.js';
 import { registerHealthHandlers } from './ipc/healthHandlers.js';
@@ -32,6 +33,7 @@ import { registerPlatformHandlers } from './ipc/platformHandlers.js';
 import { registerHardwareHandlers } from './ipc/hardwareHandlers.js';
 import { registerMediaSyncHandlers } from './ipc/mediaSyncHandlers.js';
 import { registerKoalaHandlers } from './ipc/koalaHandlers.js';
+import { registerFileHandlers } from './ipc/fileHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -52,6 +54,7 @@ const platformService = new PlatformService(paths.database);
 const mediaSyncService = new MediaSyncService();
 const adapterRegistry = new AdapterRegistry();
 const koalaService = new KoalaService();
+const analysisPipelineService = new AnalysisPipelineService(audioService, fileService);
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -66,6 +69,7 @@ registerPlatformHandlers(ipcMain, platformService);
 registerMediaSyncHandlers(ipcMain, mediaSyncService);
 registerHardwareHandlers(ipcMain, adapterRegistry);
 registerKoalaHandlers(ipcMain, koalaService);
+registerFileHandlers(ipcMain, fileService, analysisPipelineService, queueService);
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -181,8 +185,17 @@ function setupJobExecutor(window: BrowserWindow): void {
       return audioService.convertFormat(inputPath, outputFormat, options);
     }],
     ['analyze-audio', async (job: any, onProgress: Function) => {
-      const { filePath } = job.payload;
-      return audioService.fullAnalysis(filePath);
+      const { assetId, filePath } = job.payload;
+      onProgress(10, 'analyzing BPM');
+      const results = await analysisPipelineService.analyzeAsset(assetId, filePath);
+      onProgress(100, 'completed');
+      return results;
+    }],
+    ['analyze-audio-all', async (job: any, onProgress: Function) => {
+      onProgress(10, 'starting batch analysis');
+      await analysisPipelineService.analyzeAll();
+      onProgress(100, 'batch analysis completed');
+      return { success: true };
     }],
     ['separate-stems', async (job: any, onProgress: Function) => {
       const { filePath, options } = job.payload;

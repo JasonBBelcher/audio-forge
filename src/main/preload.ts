@@ -56,6 +56,8 @@ const api = {
     writeFile: (filePath: string, data: Uint8Array) => ipcRenderer.invoke('files:writeFile', filePath, data),
     getMediaDir: () => ipcRenderer.invoke('files:getMediaDir'),
     readAsArrayBuffer: (filePath: string) => ipcRenderer.invoke('files:readAsArrayBuffer', filePath),
+    import: (filePaths: string[]) => ipcRenderer.invoke('files:import', filePaths),
+    analyzeAll: () => ipcRenderer.invoke('files:analyzeAll'),
   },
   video: {
     getMetadata: (filePath: string) => ipcRenderer.invoke('video:getMetadata', filePath),

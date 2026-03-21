@@ -41,6 +41,8 @@ export class FileService {
   private readonly restoreStmt: ReturnType<DatabaseConnection['prepare']>;
   private readonly tagsStmt: ReturnType<DatabaseConnection['prepare']>;
   private readonly statsStmt: ReturnType<DatabaseConnection['prepare']>;
+  private readonly updateAnalysisStmt: ReturnType<DatabaseConnection['prepare']>;
+  private readonly listUnanalyzedStmt: ReturnType<DatabaseConnection['prepare']>;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -58,6 +60,12 @@ export class FileService {
     this.restoreStmt = db.prepare('UPDATE assets SET trashed_at = NULL WHERE id = ?');
     this.tagsStmt = db.prepare('UPDATE assets SET tags = ? WHERE id = ?');
     this.statsStmt = db.prepare('SELECT COUNT(*) as count, SUM(file_size) as total FROM assets WHERE trashed_at IS NULL');
+    this.updateAnalysisStmt = db.prepare(`
+      UPDATE assets SET bpm = COALESCE(?, bpm), key = COALESCE(?, key), duration = COALESCE(?, duration) WHERE id = ?
+    `);
+    this.listUnanalyzedStmt = db.prepare(`
+      SELECT * FROM assets WHERE trashed_at IS NULL AND (bpm IS NULL OR key IS NULL OR duration IS NULL) ORDER BY created_at DESC
+    `);
   }
 
   async importFile(filePath: string): Promise<Asset> {
@@ -130,6 +138,15 @@ export class FileService {
       totalSize: row.total ?? 0,
       totalFiles: row.count ?? 0,
     };
+  }
+
+  updateAssetAnalysis(id: number, data: { bpm?: number; key?: string; durationSec?: number }): void {
+    this.updateAnalysisStmt.run(data.bpm ?? null, data.key ?? null, data.durationSec ?? null, id);
+  }
+
+  listUnanalyzedAssets(): Asset[] {
+    const rows = this.listUnanalyzedStmt.all() as any[];
+    return rows.map((r) => this.rowToAsset(r));
   }
 
   private rowToAsset(row: any): Asset {
