@@ -9,16 +9,10 @@
     file_size: number;
   }
 
-  interface PadAssignment {
-    bank: 'A' | 'B' | 'C' | 'D';
-    padNumber: number;
-    asset: Asset | null;
-  }
-
   let kitName: string = '';
   let bpm: number | undefined = undefined;
   let syncFolder: string = '';
-  let pads: Map<string, Asset | null> = new Map();
+  let pads: Record<string, Asset | null> = {};
   let showSamplePicker: boolean = false;
   let selectedPad: string | null = null;
   let assets: Asset[] = [];
@@ -43,14 +37,13 @@
   });
 
   function initializePads() {
-    pads.clear();
+    const initial: Record<string, Asset | null> = {};
     for (const bank of banks) {
       for (let i = 1; i <= 16; i++) {
-        const key = `${bank}-${i}`;
-        pads.set(key, null);
+        initial[`${bank}-${i}`] = null;
       }
     }
-    pads = pads; // Trigger reactivity
+    pads = initial;
   }
 
   async function loadAssets() {
@@ -72,7 +65,7 @@
 
   function handlePadClick(bank: string, padNumber: number) {
     const key = getPadKey(bank, padNumber);
-    const current = pads.get(key);
+    const current = pads[key];
 
     if (current) {
       // Show clear option
@@ -88,8 +81,7 @@
 
   function showClearDialog(key: string) {
     if (handleConfirm('Clear this pad?')) {
-      pads.set(key, null);
-      pads = pads; // Trigger reactivity
+      pads = { ...pads, [key]: null };
     }
   }
 
@@ -108,8 +100,7 @@
 
   function selectAsset(asset: Asset) {
     if (selectedPad) {
-      pads.set(selectedPad, asset);
-      pads = pads; // Trigger reactivity
+      pads = { ...pads, [selectedPad]: asset };
     }
     closeSamplePicker();
   }
@@ -122,16 +113,17 @@
 
   function handleClearAll() {
     if (handleConfirm('Clear all pad assignments?')) {
-      for (const key of pads.keys()) {
-        pads.set(key, null);
+      const cleared: Record<string, Asset | null> = {};
+      for (const key of Object.keys(pads)) {
+        cleared[key] = null;
       }
-      pads = pads; // Trigger reactivity
+      pads = cleared;
     }
   }
 
   function getAssignedPads(): Array<{ bank: 'A' | 'B' | 'C' | 'D'; padNumber: number; asset: Asset }> {
     const assigned = [];
-    for (const [key, asset] of pads.entries()) {
+    for (const [key, asset] of Object.entries(pads)) {
       if (asset) {
         const [bank, padNum] = key.split('-');
         assigned.push({
@@ -143,6 +135,8 @@
     }
     return assigned;
   }
+
+  $: assignedCount = Object.values(pads).filter(Boolean).length;
 
   async function handleChangeSyncFolder() {
     try {
@@ -225,13 +219,6 @@
     }
   }
 
-  function countAssignedPads(): number {
-    let count = 0;
-    for (const asset of pads.values()) {
-      if (asset !== null) count++;
-    }
-    return count;
-  }
 </script>
 
 <div class="koala-kit-builder">
@@ -241,13 +228,17 @@
       <input
         type="text"
         placeholder="My Kit"
-        bind:value={kitName}
+        value={kitName}
+        oninput={(e) => kitName = (e.target as HTMLInputElement).value}
+        onchange={(e) => kitName = (e.target as HTMLInputElement).value}
         class="kit-name-input"
       />
       <input
         type="number"
         placeholder="120"
-        bind:value={bpm}
+        value={bpm}
+        oninput={(e) => { const v = (e.target as HTMLInputElement).valueAsNumber; bpm = isNaN(v) ? undefined : v; }}
+        onchange={(e) => { const v = (e.target as HTMLInputElement).valueAsNumber; bpm = isNaN(v) ? undefined : v; }}
         class="bpm-input"
         min="1"
       />
@@ -256,7 +247,7 @@
       <button
         class="export-btn"
         onclick={handleExport}
-        disabled={!kitName.trim() || countAssignedPads() === 0 || isExporting}
+        disabled={!kitName.trim() || assignedCount === 0 || isExporting}
       >
         {isExporting ? 'Exporting...' : 'Export'}
       </button>
@@ -294,7 +285,7 @@
         <div class="pads-container">
           {#each Array.from({ length: 16 }, (_, i) => i + 1) as padNumber}
             {@const key = getPadKey(bank, padNumber)}
-            {@const asset = pads.get(key)}
+            {@const asset = pads[key]}
             <button
               class="pad"
               class:assigned={asset !== null}
