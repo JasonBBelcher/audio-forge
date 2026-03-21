@@ -12,6 +12,7 @@
   const tabs = [
     { id: 'arrange', label: 'Arrange' },
     { id: 'mixer', label: 'Mixer' },
+    { id: 'wave-editor', label: 'Editor' },
     { id: 'audio', label: 'Audio' },
     { id: 'video', label: 'Video' },
     { id: 'sync', label: 'Sync' },

@@ -26,6 +26,7 @@
   import PlatformsView from './PlatformsView.svelte';
   import FilesView from './FilesView.svelte';
   import KoalaView from './KoalaView.svelte';
+  import WaveEditor from './WaveEditor.svelte';
   import { onMount, onDestroy } from 'svelte';
 
   let project: Project | null = null;
@@ -532,6 +533,11 @@
           />
         </div>
       </div>
+      {/if}
+
+      <!-- Wave Editor View -->
+      {#if activeTab === 'wave-editor'}
+      <WaveEditor />
       {/if}
 
       <!-- Audio View -->

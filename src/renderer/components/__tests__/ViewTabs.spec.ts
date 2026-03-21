@@ -5,24 +5,24 @@ import ViewTabs from '../ViewTabs.svelte';
 
 describe('ViewTabs Component', () => {
   describe('Rendering', () => {
-    it('renders all 8 tabs', () => {
+    it('renders all 9 tabs', () => {
       const { container } = render(ViewTabs, { props: { activeTab: 'arrange' } });
       const tabs = Array.from(container.querySelectorAll('button[data-tab]'));
-      expect(tabs.length).toBe(8);
+      expect(tabs.length).toBe(9);
     });
 
     it('renders tabs with correct labels', () => {
       const { container } = render(ViewTabs, { props: { activeTab: 'arrange' } });
       const tabs = Array.from(container.querySelectorAll('button[data-tab]'));
       const labels = tabs.map(t => t.textContent);
-      expect(labels).toEqual(['Arrange', 'Mixer', 'Audio', 'Video', 'Sync', 'Platforms', 'Files', 'Koala']);
+      expect(labels).toEqual(['Arrange', 'Mixer', 'Editor', 'Audio', 'Video', 'Sync', 'Platforms', 'Files', 'Koala']);
     });
 
     it('renders tabs with correct data-tab attributes', () => {
       const { container } = render(ViewTabs, { props: { activeTab: 'arrange' } });
       const tabs = Array.from(container.querySelectorAll('button[data-tab]'));
       const ids = tabs.map(t => t.getAttribute('data-tab'));
-      expect(ids).toEqual(['arrange', 'mixer', 'audio', 'video', 'sync', 'platforms', 'files', 'koala']);
+      expect(ids).toEqual(['arrange', 'mixer', 'wave-editor', 'audio', 'video', 'sync', 'platforms', 'files', 'koala']);
     });
 
     it('marks active tab with active class', () => {
@@ -64,7 +64,7 @@ describe('ViewTabs Component', () => {
     });
 
     it('each tab button is clickable', async () => {
-      const tabIds = ['arrange', 'mixer', 'audio', 'video', 'sync', 'platforms', 'files', 'koala'];
+      const tabIds = ['arrange', 'mixer', 'wave-editor', 'audio', 'video', 'sync', 'platforms', 'files', 'koala'];
 
       for (const tabId of tabIds) {
         const { container } = render(ViewTabs, { props: { activeTab: 'arrange' } });
@@ -80,7 +80,7 @@ describe('ViewTabs Component', () => {
     });
 
     it('works with different initial active tabs', () => {
-      const tabs = ['arrange', 'mixer', 'audio', 'video', 'sync', 'platforms', 'files', 'koala'];
+      const tabs = ['arrange', 'mixer', 'wave-editor', 'audio', 'video', 'sync', 'platforms', 'files', 'koala'];
 
       tabs.forEach(tab => {
         const { container } = render(ViewTabs, { props: { activeTab: tab } });
