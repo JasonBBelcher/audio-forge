@@ -39,4 +39,32 @@ export function registerAudioHandlers(ipcMain: IpcMain, audioService: AudioServi
   ipcMain.handle('audio:analyzeKey', async (_event, filePath: string) => {
     return audioService.analyzeKey(filePath);
   });
+
+  ipcMain.handle('audio:fadeIn', async (_event, filePath: string, durationSec: number, outputPath?: string) => {
+    return audioService.fadeIn(filePath, durationSec, outputPath);
+  });
+
+  ipcMain.handle('audio:fadeOut', async (_event, filePath: string, durationSec: number, outputPath?: string) => {
+    return audioService.fadeOut(filePath, durationSec, outputPath);
+  });
+
+  ipcMain.handle('audio:reverse', async (_event, filePath: string, outputPath?: string) => {
+    return audioService.reverse(filePath, outputPath);
+  });
+
+  ipcMain.handle('audio:pitchShift', async (_event, filePath: string, semitones: number, outputPath?: string) => {
+    return audioService.pitchShift(filePath, semitones, outputPath);
+  });
+
+  ipcMain.handle('audio:timeStretch', async (_event, filePath: string, factor: number, outputPath?: string) => {
+    return audioService.timeStretch(filePath, factor, outputPath);
+  });
+
+  ipcMain.handle('audio:silenceRemove', async (_event, filePath: string, thresholdDb?: number, outputPath?: string) => {
+    return audioService.silenceRemove(filePath, thresholdDb, outputPath);
+  });
+
+  ipcMain.handle('audio:getDuration', async (_event, filePath: string) => {
+    return audioService.getDuration(filePath);
+  });
 }

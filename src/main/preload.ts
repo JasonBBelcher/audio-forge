@@ -30,6 +30,19 @@ const api = {
     fullAnalysis: (filePath: string) => ipcRenderer.invoke('audio:fullAnalysis', filePath),
     getMetadata: (filePath: string) => ipcRenderer.invoke('audio:getMetadata', filePath),
     analyzeWaveform: (filePath: string) => ipcRenderer.invoke('audio:analyzeWaveform', filePath),
+    fadeIn: (filePath: string, durationSec: number, outputPath?: string) =>
+      ipcRenderer.invoke('audio:fadeIn', filePath, durationSec, outputPath),
+    fadeOut: (filePath: string, durationSec: number, outputPath?: string) =>
+      ipcRenderer.invoke('audio:fadeOut', filePath, durationSec, outputPath),
+    reverse: (filePath: string, outputPath?: string) =>
+      ipcRenderer.invoke('audio:reverse', filePath, outputPath),
+    pitchShift: (filePath: string, semitones: number, outputPath?: string) =>
+      ipcRenderer.invoke('audio:pitchShift', filePath, semitones, outputPath),
+    timeStretch: (filePath: string, factor: number, outputPath?: string) =>
+      ipcRenderer.invoke('audio:timeStretch', filePath, factor, outputPath),
+    silenceRemove: (filePath: string, thresholdDb?: number, outputPath?: string) =>
+      ipcRenderer.invoke('audio:silenceRemove', filePath, thresholdDb, outputPath),
+    getDuration: (filePath: string) => ipcRenderer.invoke('audio:getDuration', filePath),
   },
   projects: {
     getAll: () => ipcRenderer.invoke('projects:getAll'),

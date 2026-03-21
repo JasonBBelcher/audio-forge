@@ -229,4 +229,192 @@ export class AudioService {
       waveformPeaks: peaksResult,
     };
   }
+
+  async fadeIn(filePath: string, durationSec: number, outputPath?: string): Promise<string> {
+    const finalOutputPath =
+      outputPath ?? filePath.replace(/\.[^.]+$/, `_fadein.${path.extname(filePath).slice(1)}`);
+
+    const args = [
+      '-i',
+      filePath,
+      '-filter:a',
+      `afade=t=in:ss=0:d=${durationSec}`,
+      '-y',
+      finalOutputPath,
+    ];
+
+    const result = await runProcess('ffmpeg', args, { timeout: 300000 });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Audio fade in failed: ${result.stderr}`);
+    }
+
+    return finalOutputPath;
+  }
+
+  async fadeOut(filePath: string, durationSec: number, outputPath?: string): Promise<string> {
+    const finalOutputPath =
+      outputPath ?? filePath.replace(/\.[^.]+$/, `_fadeout.${path.extname(filePath).slice(1)}`);
+
+    // Get total duration first
+    const durationResult = await runProcess(
+      'ffprobe',
+      [
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'default=noprint_wrappers=1:nokey=1',
+        filePath,
+      ],
+      { timeout: 30000 }
+    );
+
+    if (durationResult.exitCode !== 0) {
+      throw new Error(`Duration detection failed: ${durationResult.stderr}`);
+    }
+
+    const totalDuration = parseFloat(durationResult.stdout.trim());
+    const startTime = totalDuration - durationSec;
+
+    const args = [
+      '-i',
+      filePath,
+      '-filter:a',
+      `afade=t=out:st=${startTime}:d=${durationSec}`,
+      '-y',
+      finalOutputPath,
+    ];
+
+    const result = await runProcess('ffmpeg', args, { timeout: 300000 });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Audio fade out failed: ${result.stderr}`);
+    }
+
+    return finalOutputPath;
+  }
+
+  async reverse(filePath: string, outputPath?: string): Promise<string> {
+    const finalOutputPath =
+      outputPath ?? filePath.replace(/\.[^.]+$/, `_reversed.${path.extname(filePath).slice(1)}`);
+
+    const args = [
+      '-i',
+      filePath,
+      '-filter:a',
+      'areverse',
+      '-y',
+      finalOutputPath,
+    ];
+
+    const result = await runProcess('ffmpeg', args, { timeout: 300000 });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Audio reverse failed: ${result.stderr}`);
+    }
+
+    return finalOutputPath;
+  }
+
+  async pitchShift(filePath: string, semitones: number, outputPath?: string): Promise<string> {
+    const semitoneSign = semitones >= 0 ? '+' : '';
+    const finalOutputPath =
+      outputPath ??
+      filePath.replace(/\.[^.]+$/, `_pitch${semitoneSign}${semitones}st.${path.extname(filePath).slice(1)}`);
+
+    // Calculate pitch ratio: 2^(semitones/12)
+    const pitchRatio = Math.pow(2, semitones / 12);
+    const filterStr = `rubberband=pitch=${pitchRatio}`;
+
+    const args = [
+      '-i',
+      filePath,
+      '-filter:a',
+      filterStr,
+      '-y',
+      finalOutputPath,
+    ];
+
+    const result = await runProcess('ffmpeg', args, { timeout: 300000 });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Audio pitch shift failed: ${result.stderr}`);
+    }
+
+    return finalOutputPath;
+  }
+
+  async timeStretch(filePath: string, factor: number, outputPath?: string): Promise<string> {
+    const finalOutputPath =
+      outputPath ?? filePath.replace(/\.[^.]+$/, `_stretch${factor}x.${path.extname(filePath).slice(1)}`);
+
+    // atempo expects 1/factor (factor > 1 = slower, factor < 1 = faster)
+    const tempoValue = 1 / factor;
+    const filterStr = `atempo=${tempoValue}`;
+
+    const args = [
+      '-i',
+      filePath,
+      '-filter:a',
+      filterStr,
+      '-y',
+      finalOutputPath,
+    ];
+
+    const result = await runProcess('ffmpeg', args, { timeout: 300000 });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Audio time stretch failed: ${result.stderr}`);
+    }
+
+    return finalOutputPath;
+  }
+
+  async silenceRemove(filePath: string, thresholdDb: number = -50, outputPath?: string): Promise<string> {
+    const finalOutputPath =
+      outputPath ?? filePath.replace(/\.[^.]+$/, `_trimmed.${path.extname(filePath).slice(1)}`);
+
+    const filterStr = `silenceremove=start_periods=1:start_silence=0.02:start_threshold=${thresholdDb}dB,areverse,silenceremove=start_periods=1:start_silence=0.02:start_threshold=${thresholdDb}dB,areverse`;
+
+    const args = [
+      '-i',
+      filePath,
+      '-filter:a',
+      filterStr,
+      '-y',
+      finalOutputPath,
+    ];
+
+    const result = await runProcess('ffmpeg', args, { timeout: 300000 });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Audio silence removal failed: ${result.stderr}`);
+    }
+
+    return finalOutputPath;
+  }
+
+  async getDuration(filePath: string): Promise<number> {
+    const result = await runProcess(
+      'ffprobe',
+      [
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'default=noprint_wrappers=1:nokey=1',
+        filePath,
+      ],
+      { timeout: 30000 }
+    );
+
+    if (result.exitCode !== 0) {
+      throw new Error(`Duration detection failed: ${result.stderr}`);
+    }
+
+    return parseFloat(result.stdout.trim());
+  }
 }
