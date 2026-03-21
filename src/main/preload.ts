@@ -23,9 +23,26 @@ const api = {
     getMediaDir: () => ipcRenderer.invoke('files:getMediaDir'),
     readAsArrayBuffer: (filePath: string) => ipcRenderer.invoke('files:readAsArrayBuffer', filePath),
   },
-  video: {},
-  sync: {},
-  platforms: {},
+  video: {
+    getMetadata: (filePath: string) => ipcRenderer.invoke('video:getMetadata', filePath),
+    extractAudio: (filePath: string, options?: object) => ipcRenderer.invoke('video:extractAudio', filePath, options),
+  },
+  sync: {
+    listSessions: (projectId: string) => ipcRenderer.invoke('sync:listSessions', projectId),
+    initializeSync: (projectId: string, backend: string) => ipcRenderer.invoke('sync:initialize', projectId, backend),
+    getStatus: (projectId: string) => ipcRenderer.invoke('sync:getStatus', projectId),
+  },
+  platforms: {
+    list: () => ipcRenderer.invoke('platforms:list'),
+    register: (config: object) => ipcRenderer.invoke('platforms:register', config),
+    getHistory: (platformId: string) => ipcRenderer.invoke('platforms:getHistory', platformId),
+  },
+  assets: {
+    list: () => ipcRenderer.invoke('assets:list'),
+    search: (query: string) => ipcRenderer.invoke('assets:search', query),
+    delete: (id: number) => ipcRenderer.invoke('assets:delete', id),
+    import: (filePath: string) => ipcRenderer.invoke('assets:import', filePath),
+  },
   jobs: {
     list: (status?: string) => ipcRenderer.invoke('jobs:list', status),
     getStatus: (id: string) => ipcRenderer.invoke('jobs:getStatus', id),
