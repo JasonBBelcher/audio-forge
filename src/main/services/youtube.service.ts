@@ -1,4 +1,6 @@
-import { runProcess } from '../utils/process-runner.js';
+import { runProcess, getEnhancedEnv } from '../utils/process-runner.js';
+import { spawn } from 'child_process';
+import * as path from 'path';
 
 export interface VideoFormat {
   format_id: string;
@@ -101,5 +103,100 @@ export class YouTubeService {
       speed: match[3],
       eta: match[4],
     };
+  }
+
+  /**
+   * Download audio from YouTube with progress callback support and AbortSignal.
+   * Streams progress updates and can be cancelled via AbortController.
+   */
+  async downloadWithProgress(
+    url: string,
+    outputDir: string,
+    options: {
+      trackId: string;
+      onProgress: (progress: { percent: number; speed?: string; eta?: string }) => void;
+      signal?: AbortSignal;
+    }
+  ): Promise<{ filePath: string }> {
+    return new Promise((resolve, reject) => {
+      const { trackId, onProgress, signal } = options;
+      this.validateUrl(url);
+
+      // Build yt-dlp args
+      const outputTemplate = path.join(outputDir, `${trackId}.%(ext)s`);
+      const args = [
+        '-x',
+        '--audio-format', 'wav',
+        '--audio-quality', '0',
+        '--no-playlist',
+        '-o', outputTemplate,
+        url,
+      ];
+
+      // Spawn yt-dlp process
+      const proc = spawn('yt-dlp', args, { env: getEnhancedEnv() });
+      let stdout = '';
+      let lastFile = '';
+      let settled = false;
+
+      const settle = (fn: () => void) => {
+        if (!settled) {
+          settled = true;
+          fn();
+        }
+      };
+
+      // Handle AbortSignal
+      if (signal) {
+        const onAbort = () => {
+          proc.kill('SIGTERM');
+          settle(() => reject(new Error('Download aborted')));
+        };
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener('abort', onAbort);
+      }
+
+      // Handle stdout for progress and filename extraction
+      proc.stdout.on('data', (chunk: Buffer) => {
+        const text = chunk.toString();
+        stdout += text;
+
+        // Extract destination filename
+        const destMatch = text.match(/\[ExtractAudio\] Destination: (.+)/);
+        if (destMatch) {
+          lastFile = destMatch[1].trim();
+        }
+
+        // Parse and emit progress
+        const lines = text.split('\n');
+        for (const line of lines) {
+          const progress = this.parseProgress(line);
+          if (progress) {
+            onProgress({
+              percent: progress.percent,
+              speed: progress.speed,
+              eta: progress.eta,
+            });
+          }
+        }
+      });
+
+      // Handle errors
+      proc.on('error', (err) => {
+        settle(() => reject(err));
+      });
+
+      // Handle process completion
+      proc.on('close', (code) => {
+        if (code === 0) {
+          settle(() => resolve({ filePath: lastFile }));
+        } else {
+          settle(() => reject(new Error(`yt-dlp exited with code ${code}: ${stdout}`)));
+        }
+      });
+    });
   }
 }

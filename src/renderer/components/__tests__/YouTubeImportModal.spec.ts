@@ -154,11 +154,29 @@ describe('YouTubeImportModal — fetch info flow', () => {
 });
 
 describe('YouTubeImportModal — download & progress', () => {
+  let jobListeners: Array<(data: any) => void> = [];
+  let completeListeners: Array<(data: any) => void> = [];
+  let failedListeners: Array<(data: any) => void> = [];
+
   beforeEach(() => {
     vi.clearAllMocks();
     progressListeners = [];
+    jobListeners = [];
+    completeListeners = [];
+    failedListeners = [];
     mockAf.youtube.getInfo.mockResolvedValue({
       id: 'abc', title: 'Cool Beat', duration: 180,
+    });
+    // Update mockAf.on to handle job events
+    mockAf.on.mockImplementation((channel: string, cb: (data: any) => void) => {
+      if (channel === 'youtube:progress') progressListeners.push(cb);
+      if (channel === 'job:complete') completeListeners.push(cb);
+      if (channel === 'job:failed') failedListeners.push(cb);
+      return () => {
+        progressListeners = progressListeners.filter(l => l !== cb);
+        completeListeners = completeListeners.filter(l => l !== cb);
+        failedListeners = failedListeners.filter(l => l !== cb);
+      };
     });
   });
 
@@ -175,23 +193,26 @@ describe('YouTubeImportModal — download & progress', () => {
   }
 
   it('shows progress bar during download', async () => {
-    mockAf.youtube.download.mockReturnValue(new Promise(() => {}));
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
+    await new Promise(r => setTimeout(r, 0));
     expect(container.querySelector('.progress-bar')).toBeTruthy();
   });
 
   it('shows "Downloading audio…" text during download', async () => {
-    mockAf.youtube.download.mockReturnValue(new Promise(() => {}));
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
+    await new Promise(r => setTimeout(r, 0));
     expect(container.textContent).toContain('ownloading');
   });
 
   it('progress bar width updates when youtube:progress event fires', async () => {
-    mockAf.youtube.download.mockReturnValue(new Promise(() => {}));
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
+    await new Promise(r => setTimeout(r, 0));
 
     // Fire a progress event for this trackId
     progressListeners.forEach(cb => cb({ trackId: 'track-1', percent: 72, speed: '1.2MiB/s', eta: '00:05' }));
@@ -202,9 +223,10 @@ describe('YouTubeImportModal — download & progress', () => {
   });
 
   it('progress text shows percent, speed, and ETA', async () => {
-    mockAf.youtube.download.mockReturnValue(new Promise(() => {}));
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
+    await new Promise(r => setTimeout(r, 0));
 
     progressListeners.forEach(cb => cb({ trackId: 'track-1', percent: 55.5, speed: '2MiB/s', eta: '00:10' }));
     await new Promise(r => setTimeout(r, 0));
@@ -215,9 +237,10 @@ describe('YouTubeImportModal — download & progress', () => {
   });
 
   it('ignores progress events for different trackIds', async () => {
-    mockAf.youtube.download.mockReturnValue(new Promise(() => {}));
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
+    await new Promise(r => setTimeout(r, 0));
 
     progressListeners.forEach(cb => cb({ trackId: 'OTHER-TRACK', percent: 99, speed: '5MiB/s', eta: '00:01' }));
     await new Promise(r => setTimeout(r, 0));
@@ -227,14 +250,15 @@ describe('YouTubeImportModal — download & progress', () => {
   });
 
   it('subscribes to youtube:progress on download start', async () => {
-    mockAf.youtube.download.mockReturnValue(new Promise(() => {}));
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
+    await new Promise(r => setTimeout(r, 0));
     expect(mockAf.on).toHaveBeenCalledWith('youtube:progress', expect.any(Function));
   });
 
   it('calls youtube.download with correct trackId and outputDir', async () => {
-    mockAf.youtube.download.mockResolvedValue({ success: true, filePath: '/mock/media/track-1.wav' });
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
     await new Promise(r => setTimeout(r, 0));
@@ -245,19 +269,29 @@ describe('YouTubeImportModal — download & progress', () => {
     );
   });
 
-  it('shows error state when download fails', async () => {
-    mockAf.youtube.download.mockResolvedValue({ success: false, error: 'yt-dlp not found' });
+  it('shows error state when job:failed event fires', async () => {
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
     await new Promise(r => setTimeout(r, 0));
+
+    // Fire a job:failed event for this job
+    failedListeners.forEach(cb => cb({ jobId: 'job-123', error: 'yt-dlp not found' }));
+    await new Promise(r => setTimeout(r, 0));
+
     expect(container.textContent).toContain('yt-dlp');
   });
 
-  it('shows yt-dlp install hint when error mentions yt-dlp', async () => {
-    mockAf.youtube.download.mockResolvedValue({ success: false, error: 'yt-dlp not found. Install with: brew install yt-dlp' });
+  it('shows yt-dlp install hint when job:failed mentions yt-dlp', async () => {
+    mockAf.youtube.download.mockResolvedValue({ jobId: 'job-123' });
     const { container } = render(YouTubeImportModal, { props: DEFAULT_PROPS });
     await reachDownloadPhase(container);
     await new Promise(r => setTimeout(r, 0));
+
+    // Fire a job:failed event with yt-dlp error
+    failedListeners.forEach(cb => cb({ jobId: 'job-123', error: 'yt-dlp not found. Install with: brew install yt-dlp' }));
+    await new Promise(r => setTimeout(r, 0));
+
     expect(container.textContent).toContain('brew install yt-dlp');
   });
 });

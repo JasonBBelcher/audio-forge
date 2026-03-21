@@ -6,8 +6,15 @@ export function registerPlatformHandlers(ipcMain: IpcMain, platformService: Plat
     return platformService.listIntegrations();
   });
 
-  ipcMain.handle('platforms:register', (_event, config: object) => {
-    return platformService.registerIntegration(config as any);
+  ipcMain.handle('platforms:register', (_event, config: Record<string, string>) => {
+    // clientId / clientSecret / redirectUri are optional at registration time —
+    // they are filled in after the OAuth flow completes.
+    return platformService.registerIntegration({
+      name: config.name ?? 'Unknown',
+      clientId: config.clientId ?? '',
+      clientSecret: config.clientSecret ?? '',
+      redirectUri: config.redirectUri ?? 'http://localhost:3847/callback',
+    });
   });
 
   ipcMain.handle('platforms:getHistory', (_event, platformId: string) => {

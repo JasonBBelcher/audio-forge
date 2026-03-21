@@ -17,6 +17,7 @@ import { FileService } from './services/file.service.js';
 import { SyncService } from './services/sync.service.js';
 import { PlatformService } from './services/platform.service.js';
 import { JobExecutor } from './services/job-executor.js';
+import { MediaSyncService } from './services/media-sync.service.js';
 import { AdapterRegistry } from './services/hardware-adapter.js';
 import { registerProjectHandlers } from './ipc/projectHandlers.js';
 import { registerSettingsHandlers } from './ipc/settingsHandlers.js';
@@ -28,6 +29,7 @@ import { registerAssetHandlers } from './ipc/assetHandlers.js';
 import { registerSyncHandlers } from './ipc/syncHandlers.js';
 import { registerPlatformHandlers } from './ipc/platformHandlers.js';
 import { registerHardwareHandlers } from './ipc/hardwareHandlers.js';
+import { registerMediaSyncHandlers } from './ipc/mediaSyncHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -45,6 +47,7 @@ const videoService = new VideoService();
 const fileService = new FileService(db, paths.media);
 const syncService = new SyncService(paths.database);
 const platformService = new PlatformService(paths.database);
+const mediaSyncService = new MediaSyncService();
 const adapterRegistry = new AdapterRegistry();
 
 // Register service handlers
@@ -57,6 +60,7 @@ registerVideoHandlers(ipcMain, videoService);
 registerAssetHandlers(ipcMain, fileService);
 registerSyncHandlers(ipcMain, syncService);
 registerPlatformHandlers(ipcMain, platformService);
+registerMediaSyncHandlers(ipcMain, mediaSyncService);
 registerHardwareHandlers(ipcMain, adapterRegistry);
 
 function ensureDir(dir: string) {
@@ -99,108 +103,10 @@ ipcMain.handle('youtube:getInfo', async (_event, url: string) => {
   return youtubeService.getInfo(url);
 });
 
-ipcMain.handle('youtube:download', async (event, url: string, trackId: string, outputDir: string) => {
+ipcMain.handle('youtube:download', async (_event, url: string, trackId: string, outputDir: string) => {
   ensureDir(outputDir);
-  // Use %(id)s so yt-dlp controls the final name; we scan for the result after
-  const outputTemplate = path.join(outputDir, `${trackId}.%(ext)s`);
-
-  return new Promise<{ success: boolean; filePath: string; error?: string }>((resolve) => {
-    // Build args manually for audio-only extraction
-    const args = [
-      '-x',
-      '--audio-format', 'wav',
-      '--audio-quality', '0',
-      '--no-playlist',
-      '-o', outputTemplate,
-      url,
-    ];
-
-    const proc = spawn('yt-dlp', args, { env: getEnhancedEnv() });
-    let stderr = '';
-    let lastFile = '';
-
-    proc.stdout.on('data', (data: Buffer) => {
-      const text = data.toString();
-      // Capture output filename from yt-dlp
-      const destMatch = text.match(/\[ExtractAudio\] Destination: (.+)/);
-      if (destMatch) lastFile = destMatch[1].trim();
-
-      const lines = text.split('\n');
-      for (const line of lines) {
-        const progress = youtubeService.parseProgress(line);
-        if (progress) {
-          event.sender.send('youtube:progress', { trackId, ...progress });
-        }
-      }
-    });
-
-    proc.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    proc.on('close', (code) => {
-      // Find the actual wav file produced (yt-dlp may name it differently)
-      const wavPath = lastFile || path.join(outputDir, `${trackId}.wav`);
-      if (code === 0 && fs.existsSync(wavPath)) {
-        resolve({ success: true, filePath: wavPath });
-      } else {
-        // Scan outputDir for any wav matching trackId prefix
-        try {
-          const files = fs.readdirSync(outputDir).filter(f => f.startsWith(trackId) && f.endsWith('.wav'));
-          if (files.length > 0) {
-            resolve({ success: true, filePath: path.join(outputDir, files[0]) });
-            return;
-          }
-        } catch {}
-        resolve({ success: false, filePath: '', error: stderr || 'Download failed. Is yt-dlp installed? Run: brew install yt-dlp' });
-      }
-    });
-
-    proc.on('error', (err) => {
-      resolve({
-        success: false,
-        filePath: '',
-        error: err.message.includes('ENOENT')
-          ? 'yt-dlp not found. Install with: brew install yt-dlp'
-          : err.message,
-      });
-    });
-  });
-});
-
-// ─── Audio Analysis IPC ───────────────────────────────────────────────────────
-
-ipcMain.handle('audio:analyzeBPM', async (_event, filePath: string) => {
-  return new Promise<{ bpm: number; error?: string }>((resolve) => {
-    // Use aubio tempo via aubiotrack, fallback gracefully if not installed
-    const proc = spawn('aubiotrack', ['-i', filePath], { env: getEnhancedEnv() });
-    const lines: string[] = [];
-
-    proc.stdout.on('data', (d: Buffer) => lines.push(...d.toString().split('\n').filter(Boolean)));
-    proc.on('close', (code) => {
-      if (code === 0 && lines.length > 1) {
-        const times = lines.map(Number).filter(Boolean);
-        if (times.length > 1) {
-          const intervals = times.slice(1).map((t, i) => t - times[i]);
-          const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-          resolve({ bpm: Math.round(60 / avgInterval) });
-          return;
-        }
-      }
-      resolve({ bpm: 0, error: 'aubio not available' });
-    });
-    proc.on('error', () => resolve({ bpm: 0, error: 'aubio not installed' }));
-  });
-});
-
-ipcMain.handle('audio:analyzeKey', async (_event, filePath: string) => {
-  return new Promise<{ key: string; error?: string }>((resolve) => {
-    const proc = spawn('aubiokey', ['-i', filePath], { env: getEnhancedEnv() });
-    let out = '';
-    proc.stdout.on('data', (d: Buffer) => (out += d.toString()));
-    proc.on('close', () => resolve({ key: out.trim() || 'Unknown' }));
-    proc.on('error', () => resolve({ key: 'Unknown', error: 'aubio not installed' }));
-  });
+  const jobId = queueService.enqueue('download-youtube', { url, trackId, outputDir });
+  return { jobId };
 });
 
 // ─── File IPC ─────────────────────────────────────────────────────────────────
@@ -246,9 +152,25 @@ function setupJobExecutor(window: BrowserWindow): void {
 
   // Create job handlers map with injected services
   const jobHandlers = new Map<string, any>([
-    ['download-youtube', async (job: any, onProgress: Function) => {
-      // YouTube download handled via youtube:download IPC instead
-      throw new Error('YouTube downloads should use IPC handler directly');
+    ['download-youtube', async (job: any, onProgress: Function, signal?: AbortSignal) => {
+      const { url, trackId, outputDir } = job.payload as {
+        url: string; trackId: string; outputDir: string;
+      };
+      ensureDir(outputDir as string);
+
+      const result = await youtubeService.downloadWithProgress(url as string, outputDir as string, {
+        trackId: trackId as string,
+        onProgress: (progress) => {
+          onProgress(progress.percent, 'downloading');
+          // Also emit youtube:progress for the modal's existing subscription
+          if (mainWindow) {
+            mainWindow.webContents.send('youtube:progress', { trackId, ...progress });
+          }
+        },
+        signal,
+      });
+
+      return { filePath: result.filePath };
     }],
     ['convert-audio', async (job: any, onProgress: Function) => {
       const { inputPath, outputFormat, options } = job.payload;
@@ -261,6 +183,15 @@ function setupJobExecutor(window: BrowserWindow): void {
     ['separate-stems', async (job: any, onProgress: Function) => {
       const { filePath, options } = job.payload;
       return audioService.separateStems(filePath, options);
+    }],
+    ['sync-media', async (job: any, onProgress: Function) => {
+      const { videoPath, audioPath, outputPath } = job.payload as any;
+      onProgress(10, 'finding offset');
+      const { offsetSec } = await mediaSyncService.findOffset(audioPath, audioPath);
+      onProgress(50, 'syncing');
+      const result = await mediaSyncService.syncAudioWithVideo(videoPath, audioPath, offsetSec, outputPath);
+      onProgress(100, 'done');
+      return result as any;
     }],
   ]);
 

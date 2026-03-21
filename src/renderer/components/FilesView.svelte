@@ -4,8 +4,8 @@
   interface Asset {
     id: number;
     name: string;
-    type: 'audio' | 'video';
-    size: number;
+    file_type: string;
+    file_size: number;
   }
 
   let assets: Asset[] = [];
@@ -110,7 +110,7 @@
   }
 
   function getTotalSize(files: Asset[]): string {
-    const total = files.reduce((sum, f) => sum + f.size, 0);
+    const total = files.reduce((sum, f) => sum + (f.file_size ?? 0), 0);
     return formatFileSize(total);
   }
 </script>
@@ -136,8 +136,8 @@
             <div class="file-info">
               <span class="file-name">{asset.name}</span>
               <div class="file-meta">
-                <span class={`type-badge ${asset.type}`}>{asset.type}</span>
-                <span class="file-size">{formatFileSize(asset.size)}</span>
+                <span class={`type-badge ${asset.file_type}`}>{asset.file_type}</span>
+                <span class="file-size">{formatFileSize(asset.file_size ?? 0)}</span>
               </div>
             </div>
             <button class="delete-btn" onclick={() => handleDeleteFile(asset.id)}>×</button>

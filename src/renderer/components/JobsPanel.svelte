@@ -39,13 +39,24 @@
     await fetchJobs();
   }
 
+  let unsubscribers: Array<() => void> = [];
+
   onMount(() => {
     fetchJobs();
     pollTimer = setInterval(fetchJobs, POLL_INTERVAL);
+
+    // Real-time updates from the main process job executor
+    const af = (window as any).audioforge;
+    if (af?.on) {
+      unsubscribers.push(af.on('job:progress', () => fetchJobs()));
+      unsubscribers.push(af.on('job:complete', () => fetchJobs()));
+      unsubscribers.push(af.on('job:failed', () => fetchJobs()));
+    }
   });
 
   onDestroy(() => {
     if (pollTimer !== null) clearInterval(pollTimer);
+    unsubscribers.forEach(unsub => unsub());
   });
 
   function isCancellable(status: Job['status']): boolean {

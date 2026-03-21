@@ -1,6 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 const api = {
+  mediaSync: {
+    findOffset: (refPath: string, targetPath: string) =>
+      ipcRenderer.invoke('media-sync:findOffset', refPath, targetPath),
+    syncAudioWithVideo: (videoPath: string, audioPath: string, offsetSec: number, outputPath: string) =>
+      ipcRenderer.invoke('media-sync:syncAudioWithVideo', videoPath, audioPath, offsetSec, outputPath),
+    alignRecordings: (refPath: string, targetPaths: string[], outputDir: string) =>
+      ipcRenderer.invoke('media-sync:alignRecordings', refPath, targetPaths, outputDir),
+    autoSync: (videoPath: string, audioPath: string, outputPath: string) =>
+      ipcRenderer.invoke('media-sync:autoSync', videoPath, audioPath, outputPath),
+  },
   youtube: {
     getInfo: (url: string) => ipcRenderer.invoke('youtube:getInfo', url),
     download: (url: string, trackId: string, outputDir: string) =>

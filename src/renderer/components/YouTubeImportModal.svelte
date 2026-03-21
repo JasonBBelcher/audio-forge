@@ -48,7 +48,7 @@
 
     const mediaDir = await af.files.getMediaDir();
 
-    // Listen for progress events
+    // Listen for progress events from job executor
     const unsubProgress = af.on('youtube:progress', (data: any) => {
       if (data.trackId === trackId) {
         progress = data.percent;
@@ -57,14 +57,32 @@
     });
 
     try {
+      // Enqueue the download job and get jobId back
       const result = await af.youtube.download(url.trim(), trackId, mediaDir);
-      unsubProgress();
-      if (result.success) {
-        dispatch('imported', { filePath: result.filePath, title: videoInfo!.title });
-      } else {
-        errorMsg = result.error || 'Download failed';
-        phase = 'error';
-      }
+      const jobId = result.jobId;
+
+      // Listen for job completion
+      const unsubComplete = af.on('job:complete', (data: any) => {
+        if (data.jobId === jobId) {
+          unsubComplete();
+          unsubFailed();
+          unsubProgress();
+          const filePath = data.result.filePath;
+          dispatch('imported', { filePath, title: videoInfo!.title });
+          phase = 'done';
+        }
+      });
+
+      // Listen for job failure
+      const unsubFailed = af.on('job:failed', (data: any) => {
+        if (data.jobId === jobId) {
+          unsubComplete();
+          unsubFailed();
+          unsubProgress();
+          errorMsg = data.error || 'Download failed';
+          phase = 'error';
+        }
+      });
     } catch (e: any) {
       unsubProgress();
       errorMsg = e.message || 'Download failed';
