@@ -73,15 +73,4 @@ describe('ProjectEditor Keyboard Shortcuts', () => {
     await fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
     expect(mockAudioEngine.stop).toHaveBeenCalled();
   });
-
-  it('keyboard shortcuts do not fire when editing a track name', async () => {
-    const { container } = render(ProjectEditor);
-    // Start renaming a track
-    const trackName = container.querySelector('.track-name') as HTMLElement;
-    await fireEvent.dblClick(trackName);
-    const input = container.querySelector('.track-name-input') as HTMLInputElement;
-    // Space in the input should NOT trigger play
-    await fireEvent.keyDown(input, { key: ' ', code: 'Space' });
-    expect(mockAudioEngine.play).not.toHaveBeenCalled();
-  });
 });

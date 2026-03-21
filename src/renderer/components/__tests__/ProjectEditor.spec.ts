@@ -59,89 +59,111 @@ describe('ProjectEditor Component', () => {
     playbackStore.reset?.();
   });
 
-  it('renders the empty state when no project selected', () => {
-    projectStore.setCurrentProject(null);
-    const { container } = render(ProjectEditor);
-    expect(container.textContent).toContain('No project selected');
+  describe('Layout', () => {
+    it('renders the empty state when no project selected', () => {
+      projectStore.setCurrentProject(null);
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('No project selected');
+    });
+
+    it('renders project name when project is set', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('Editor Test');
+    });
+
+    it('renders BPM in header', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('140');
+    });
+
+    it('renders time signature in header', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('4/4');
+    });
+
+    it('renders transport section', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.querySelector('.transport')).toBeTruthy();
+    });
+
+    it('renders back button', () => {
+      const { container } = render(ProjectEditor);
+      const btns = Array.from(container.querySelectorAll('button'));
+      expect(btns.some(b => b.textContent?.includes('Back'))).toBe(true);
+    });
+
+    it('renders Export Mix button', () => {
+      const { container } = render(ProjectEditor);
+      const btns = Array.from(container.querySelectorAll('button'));
+      expect(btns.some(b => b.textContent?.includes('Export'))).toBe(true);
+    });
   });
 
-  it('renders project name when project is set', () => {
-    const { container } = render(ProjectEditor);
-    expect(container.textContent).toContain('Editor Test');
+  describe('Sidebar Navigation', () => {
+    it('renders sidebar', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.querySelector('.sidebar')).toBeTruthy();
+    });
+
+    it('renders Library nav item as default active view', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('Library');
+    });
+
+    it('renders Import nav item', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('Import');
+    });
+
+    it('renders Collections nav item', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('Collections');
+    });
+
+    it('renders Koala Kit nav item', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('Koala');
+    });
+
+    it('renders Settings nav item', () => {
+      const { container } = render(ProjectEditor);
+      expect(container.textContent).toContain('Settings');
+    });
   });
 
-  it('renders BPM in header', () => {
-    const { container } = render(ProjectEditor);
-    expect(container.textContent).toContain('140');
+  describe('Transport Controls', () => {
+    it('renders play button', () => {
+      const { container } = render(ProjectEditor);
+      const btns = Array.from(container.querySelectorAll('button'));
+      expect(btns.some(b => b.textContent?.includes('Play'))).toBe(true);
+    });
+
+    it('renders stop button', () => {
+      const { container } = render(ProjectEditor);
+      const btns = Array.from(container.querySelectorAll('button'));
+      expect(btns.some(b => b.textContent?.includes('Stop'))).toBe(true);
+    });
+
+    it('renders metronome button', () => {
+      const { container } = render(ProjectEditor);
+      const btns = Array.from(container.querySelectorAll('button'));
+      expect(btns.some(b => b.textContent?.includes('Metro'))).toBe(true);
+    });
+
+    it('renders master volume slider', () => {
+      const { container } = render(ProjectEditor);
+      const slider = container.querySelector('#master-volume');
+      expect(slider).toBeTruthy();
+    });
   });
 
-  it('renders time signature in header', () => {
-    const { container } = render(ProjectEditor);
-    expect(container.textContent).toContain('4/4');
-  });
-
-  it('renders transport section', () => {
-    const { container } = render(ProjectEditor);
-    expect(container.querySelector('.transport')).toBeTruthy();
-  });
-
-  it('renders play button', () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    expect(btns.some(b => b.textContent?.includes('Play'))).toBe(true);
-  });
-
-  it('renders stop button', () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    expect(btns.some(b => b.textContent?.includes('Stop'))).toBe(true);
-  });
-
-  it('renders arrange section', () => {
-    const { container } = render(ProjectEditor);
-    expect(container.textContent).toContain('Arrange');
-  });
-
-  it('renders mixer section', () => {
-    const { container } = render(ProjectEditor);
-    expect(container.textContent).toContain('Mixer');
-  });
-
-  it('renders add track button', () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    expect(btns.some(b => b.textContent?.includes('Track'))).toBe(true);
-  });
-
-  it('renders back button', () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    expect(btns.some(b => b.textContent?.includes('Back'))).toBe(true);
-  });
-
-  it('renders metronome button', () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    expect(btns.some(b => b.textContent?.includes('Metro'))).toBe(true);
-  });
-
-  it('renders master volume slider', () => {
-    const { container } = render(ProjectEditor);
-    const slider = container.querySelector('#master-volume');
-    expect(slider).toBeTruthy();
-  });
-
-  it('renders Export Mix button', () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    expect(btns.some(b => b.textContent?.includes('Export'))).toBe(true);
-  });
-
-  it('shows export modal when Export Mix button is clicked', async () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    const exportBtn = btns.find(b => b.textContent?.includes('Export')) as HTMLButtonElement;
-    await fireEvent.click(exportBtn);
-    expect(container.querySelector('.modal-overlay')).toBeTruthy();
+  describe('Modal Integration', () => {
+    it('shows export modal when Export Mix button is clicked', async () => {
+      const { container } = render(ProjectEditor);
+      const btns = Array.from(container.querySelectorAll('button'));
+      const exportBtn = btns.find(b => b.textContent?.includes('Export')) as HTMLButtonElement;
+      await fireEvent.click(exportBtn);
+      expect(container.querySelector('.modal-overlay')).toBeTruthy();
+    });
   });
 });

@@ -139,20 +139,3 @@ describe('Undo/Redo toolbar buttons', () => {
     undoSpy.mockRestore();
   });
 });
-
-describe('Add/Remove track commands are undoable', () => {
-  beforeEach(() => {
-    historyStore.clear();
-    projectStore.setCurrentProject(testProject);
-  });
-
-  it('adding a track pushes to historyStore', async () => {
-    const { container } = render(ProjectEditor);
-    const initialUndoable = historyStore.canUndo();
-    const btns = Array.from(container.querySelectorAll('button'));
-    const addBtn = btns.find(b => b.textContent?.includes('Track')) as HTMLButtonElement;
-    await fireEvent.click(addBtn);
-    expect(historyStore.canUndo()).toBe(true);
-    expect(historyStore.canUndo()).not.toBe(initialUndoable);
-  });
-});

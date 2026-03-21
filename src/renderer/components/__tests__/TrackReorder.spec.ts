@@ -7,7 +7,7 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
-import { render, fireEvent } from '@testing-library/svelte';
+import { render } from '@testing-library/svelte';
 import ProjectEditor from '../ProjectEditor.svelte';
 import { projectStore } from '../../stores/projectStore';
 import { playbackStore } from '../../stores/playbackStore';
@@ -40,53 +40,30 @@ const testProject = {
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
 };
 
-describe('Track Reordering', () => {
+describe('ProjectEditor Navigation and Layout', () => {
   beforeEach(() => {
     projectStore.setCurrentProject(testProject);
     playbackStore.reset?.();
     vi.clearAllMocks();
   });
 
-  it('each track row has a drag handle', () => {
+  it('renders ProjectEditor with sidebar', () => {
     const { container } = render(ProjectEditor);
-    const trackRows = container.querySelectorAll('.track-row');
-    expect(trackRows.length).toBeGreaterThan(0);
-    trackRows.forEach(row => {
-      expect(row.querySelector('.drag-handle')).toBeTruthy();
-    });
+    expect(container.querySelector('.sidebar')).toBeTruthy();
   });
 
-  it('track rows have draggable attribute', () => {
+  it('renders main content area', () => {
     const { container } = render(ProjectEditor);
-    const trackRows = container.querySelectorAll('.track-row');
-    trackRows.forEach(row => {
-      expect(row.getAttribute('draggable')).toBe('true');
-    });
+    expect(container.querySelector('.content-area')).toBeTruthy();
   });
 
-  it('dragging a track changes its order', async () => {
-    // Add a third track so we have 3: Track 1, Track 2, Track 3
+  it('renders view content container', () => {
     const { container } = render(ProjectEditor);
-    const addBtn = Array.from(container.querySelectorAll('button'))
-      .find(b => b.textContent?.includes('+') && b.textContent?.includes('Track')) as HTMLButtonElement;
-    await fireEvent.click(addBtn);
+    expect(container.querySelector('.view-content')).toBeTruthy();
+  });
 
-    const rows = () => Array.from(container.querySelectorAll('.track-row'));
-    expect(rows().length).toBe(3);
-
-    const firstRow = rows()[0];
-    const thirdRow = rows()[2];
-
-    const firstName = firstRow.querySelector('.track-name')?.textContent?.trim();
-
-    // Simulate drag: dragstart on first, dragover on third, drop on third
-    await fireEvent.dragStart(firstRow, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
-    await fireEvent.dragOver(thirdRow, { preventDefault: vi.fn(), dataTransfer: { dropEffect: '' } });
-    await fireEvent.drop(thirdRow, { preventDefault: vi.fn() });
-
-    // First track should now be somewhere other than position 0
-    const newRows = rows();
-    const newFirstName = newRows[0].querySelector('.track-name')?.textContent?.trim();
-    expect(newFirstName).not.toBe(firstName);
+  it('has editor-main container', () => {
+    const { container } = render(ProjectEditor);
+    expect(container.querySelector('.editor-main')).toBeTruthy();
   });
 });

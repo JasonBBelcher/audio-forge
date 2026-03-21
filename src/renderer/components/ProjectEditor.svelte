@@ -19,13 +19,13 @@
   import Waveform from './ui/Waveform.svelte';
   import YouTubeImportModal from './YouTubeImportModal.svelte';
   import ExportModal from './ExportModal.svelte';
-  import ViewTabs from './ViewTabs.svelte';
-  import AudioView from './AudioView.svelte';
-  import VideoView from './VideoView.svelte';
-  import SyncView from './SyncView.svelte';
-  import PlatformsView from './PlatformsView.svelte';
+  import Sidebar from './Sidebar.svelte';
   import FilesView from './FilesView.svelte';
-  import KoalaView from './KoalaView.svelte';
+  import ImportView from './ImportView.svelte';
+  import CollectionsView from './CollectionsView.svelte';
+  import KoalaKitBuilder from './KoalaKitBuilder.svelte';
+  import HealthPanel from './HealthPanel.svelte';
+  import JobsPanel from './JobsPanel.svelte';
   import WaveEditor from './WaveEditor.svelte';
   import { onMount, onDestroy } from 'svelte';
 
@@ -39,7 +39,8 @@
   let renameValue = '';
   let dragSourceIndex: number | null = null;
   let dragOverIndex: number | null = null;
-  let activeTab = 'arrange';
+  let activeView = 'library';
+  let selectedFilePath: string | null = null;
   let tracks: any[] = [
     { id: '1', name: 'Track 1', volume: 0.8, muted: false, solo: false, hasAudio: false },
     { id: '2', name: 'Track 2', volume: 0.7, muted: false, solo: false, hasAudio: false },
@@ -402,173 +403,64 @@
       </div>
     </section>
 
-    <!-- View Tabs -->
-    <ViewTabs {activeTab} on:tabchange={(e) => (activeTab = e.detail)} />
+    <!-- Navigation & Content -->
+    <div class="editor-main">
+      <!-- Sidebar Navigation -->
+      <Sidebar {activeView} on:navigate={(e) => (activeView = e.detail.view)} />
 
-    <!-- Main Edit Area -->
-    <div class="edit-area">
-      <!-- Arrange View -->
-      {#if activeTab === 'arrange'}
-      <div class="arrange">
-        <div class="arrange-header">
-          <h2>Arrange</h2>
-          <Button on:click={handleAddTrack} variant="primary">+ Track</Button>
+      <!-- Main Content Area -->
+      <div class="content-area">
+        <!-- Top Bar with Jobs & Health -->
+        <div class="top-bar">
+          <div class="top-bar-left">
+            <!-- View title -->
+            {#if activeView === 'library'}
+              <h2>Library</h2>
+            {:else if activeView === 'import'}
+              <h2>Import</h2>
+            {:else if activeView === 'collections'}
+              <h2>Collections</h2>
+            {:else if activeView === 'koala'}
+              <h2>Koala Kit</h2>
+            {:else if activeView === 'settings'}
+              <h2>Settings</h2>
+            {:else if activeView === 'wave-editor'}
+              <h2>Wave Editor</h2>
+            {/if}
+          </div>
+          <div class="top-bar-right">
+            <div class="panel-container">
+              <JobsPanel />
+            </div>
+            <div class="panel-container">
+              <HealthPanel />
+            </div>
+          </div>
         </div>
-        <div class="tracks-list">
-          {#each tracks as track, i (track.id)}
-            <div
-              class={`track-row ${dragOverIndex === i ? 'drag-over' : ''}`}
-              draggable="true"
-              on:dragstart={() => handleDragStart(i)}
-              on:dragover={(e) => handleDragOver(e, i)}
-              on:drop={(e) => handleDrop(e, i)}
-              on:dragend={handleDragEnd}
-            >
-              <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
-              <div class="track-info">
-                {#if renamingTrackId === track.id}
-                  <input
-                    class="track-name-input"
-                    type="text"
-                    bind:value={renameValue}
-                    on:keydown={handleRenameKeyDown}
-                    on:blur={commitRename}
-                    autofocus
-                  />
-                {:else}
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <span
-                    class="track-name"
-                    on:dblclick={() => startRename(track.id, track.name)}
-                    title="Double-click to rename"
-                  >{track.name}</span>
-                {/if}
-                {#if track.hasAudio}
-                  <span class="audio-badge">♪</span>
-                {:else}
-                  <span class="no-audio">empty</span>
-                {/if}
-              </div>
-              <div class="track-waveform">
-                <Waveform
-                  buffer={audioEngine.getTrackBuffer(track.id)}
-                  currentTime={playback?.currentTime || 0}
-                  duration={playback?.duration || 0}
-                  height={48}
-                />
-              </div>
-              <div class="track-controls">
-                <button
-                  class={`control-btn record-btn ${recordingTrackId === track.id ? 'active recording' : ''}`}
-                  on:click={() => handleRecord(track.id)}
-                  title={recordingTrackId === track.id ? 'Stop recording' : 'Record'}
-                >
-                  {recordingTrackId === track.id ? '⏹' : '●'}
-                </button>
-                <button
-                  class="control-btn load"
-                  on:click={() => handleLoadAudio(track.id)}
-                  title="Load audio file"
-                >
-                  ↑
-                </button>
-                <button
-                  class="control-btn yt"
-                  on:click={() => handleOpenYouTubeImport(track.id, track.name)}
-                  title="Import from YouTube"
-                >
-                  ▶
-                </button>
-                <button
-                  class={`control-btn mute ${track.muted ? 'active' : ''}`}
-                  on:click={() => handleTrackMute(track.id)}
-                  title="Mute"
-                >
-                  M
-                </button>
-                <button
-                  class={`control-btn solo ${track.solo ? 'active' : ''}`}
-                  on:click={() => handleTrackSolo(track.id)}
-                  title="Solo"
-                >
-                  S
-                </button>
-                <button
-                  class="control-btn delete"
-                  on:click={() => handleRemoveTrack(track.id)}
-                  title="Delete"
-                >
-                  ✕
-                </button>
+
+        <!-- View Content -->
+        <div class="view-content">
+          {#if activeView === 'library'}
+            <FilesView />
+          {:else if activeView === 'import'}
+            <ImportView />
+          {:else if activeView === 'collections'}
+            <CollectionsView />
+          {:else if activeView === 'koala'}
+            <KoalaKitBuilder />
+          {:else if activeView === 'settings'}
+            <div class="settings-view">
+              <HealthPanel />
+              <div class="audio-settings">
+                <h3>Audio Settings</h3>
+                <p>Audio configuration coming soon...</p>
               </div>
             </div>
-          {/each}
+          {:else if activeView === 'wave-editor'}
+            <WaveEditor />
+          {/if}
         </div>
       </div>
-      {/if}
-
-      <!-- Mixer View -->
-      {#if activeTab === 'mixer'}
-      <div class="mixer">
-        <h2>Mixer</h2>
-        <div class="mixer-channels">
-          {#each tracks as track (track.id)}
-            <Fader
-              name={track.name}
-              value={track.volume}
-              muted={track.muted}
-              solo={track.solo}
-              on:change={(e) => handleTrackVolumeChange(track.id, e.detail)}
-              on:mute={() => handleTrackMute(track.id)}
-              on:solo={() => handleTrackSolo(track.id)}
-            />
-          {/each}
-
-          <!-- Master Fader -->
-          <Fader
-            name="Master"
-            value={playback?.masterVolume || 1}
-            isMaster={true}
-            on:change={(e) => playbackStore.setVolume(e.detail)}
-          />
-        </div>
-      </div>
-      {/if}
-
-      <!-- Wave Editor View -->
-      {#if activeTab === 'wave-editor'}
-      <WaveEditor />
-      {/if}
-
-      <!-- Audio View -->
-      {#if activeTab === 'audio'}
-      <AudioView />
-      {/if}
-
-      <!-- Video View -->
-      {#if activeTab === 'video'}
-      <VideoView />
-      {/if}
-
-      <!-- Sync View -->
-      {#if activeTab === 'sync'}
-      <SyncView projectId={project?.id ?? ''} />
-      {/if}
-
-      <!-- Platforms View -->
-      {#if activeTab === 'platforms'}
-      <PlatformsView />
-      {/if}
-
-      <!-- Files View -->
-      {#if activeTab === 'files'}
-      <FilesView />
-      {/if}
-
-      <!-- Koala View -->
-      {#if activeTab === 'koala'}
-      <KoalaView />
-      {/if}
     </div>
   </div>
 </div>
@@ -669,6 +561,86 @@
     flex-direction: column;
     overflow: hidden;
     padding: 1.5rem;
+  }
+
+  .editor-main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 16px;
+  }
+
+  .top-bar-left {
+    flex: 1;
+  }
+
+  .top-bar-left h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .top-bar-right {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .panel-container {
+    width: 300px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .view-content {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .settings-view {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+    height: 100%;
+  }
+
+  .audio-settings {
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+  }
+
+  .audio-settings h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .audio-settings p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
   }
 
   .transport {

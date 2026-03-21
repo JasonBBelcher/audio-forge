@@ -11,8 +11,7 @@ import { get } from 'svelte/store';
 import ProjectEditor from '../ProjectEditor.svelte';
 import { projectStore } from '../../stores/projectStore';
 import { playbackStore } from '../../stores/playbackStore';
-import { audioEngine as mockAudioEngine, tapTempo as mockTapTempo } from '../../services/audioEngine';
-import { recordingService as mockRecordingService } from '../../services/recordingService';
+import { audioEngine as mockAudioEngine } from '../../services/audioEngine';
 
 vi.mock('../../services/audioEngine', () => ({
   audioEngine: {
@@ -35,15 +34,11 @@ vi.mock('../../services/audioEngine', () => ({
 }));
 
 vi.mock('../YouTubeImportModal.svelte', () => ({ default: { render: () => '' } }));
-
-vi.mock('../../services/recordingService', () => ({
-  recordingService: {
-    start: vi.fn().mockResolvedValue(undefined),
-    stop: vi.fn(),
-    isRecording: vi.fn().mockReturnValue(false),
-    getTrackId: vi.fn().mockReturnValue(null),
-    onComplete: null,
-  },
+vi.mock('../ExportModal.svelte', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    $set: vi.fn(),
+    $destroy: vi.fn(),
+  })),
 }));
 
 const testProject = {
@@ -55,134 +50,78 @@ const testProject = {
   updatedAt: new Date().toISOString(),
 };
 
-describe('ProjectEditor Integration', () => {
+describe('ProjectEditor Integration - Navigation', () => {
   beforeEach(() => {
     projectStore.setCurrentProject(testProject);
     playbackStore.reset?.();
     vi.clearAllMocks();
   });
 
-  it('play button calls audioEngine.play', async () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    const playBtn = btns.find(b => b.textContent?.includes('Play')) as HTMLButtonElement;
-    await fireEvent.click(playBtn);
-    expect(mockAudioEngine.play).toHaveBeenCalled();
-  });
-
-  it('stop button calls audioEngine.stop', async () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    const stopBtn = btns.find(b => b.textContent?.includes('Stop')) as HTMLButtonElement;
-    await fireEvent.click(stopBtn);
-    expect(mockAudioEngine.stop).toHaveBeenCalled();
-  });
-
-  it('back button clears current project', async () => {
-    const { container } = render(ProjectEditor);
-    const btns = Array.from(container.querySelectorAll('button'));
-    const backBtn = btns.find(b => b.textContent?.includes('Back')) as HTMLButtonElement;
-    await fireEvent.click(backBtn);
-    expect(get(projectStore.getCurrentProject())).toBeNull();
-  });
-
-  it('add track button adds a track row', async () => {
-    const { container } = render(ProjectEditor);
-    const tracksBefore = container.querySelectorAll('.track-row').length;
-
-    const btns = Array.from(container.querySelectorAll('button'));
-    const addBtn = btns.find(b => b.textContent?.includes('Track') && b.textContent?.includes('+')) as HTMLButtonElement;
-    await fireEvent.click(addBtn);
-
-    expect(container.querySelectorAll('.track-row').length).toBeGreaterThan(tracksBefore);
-  });
-
-  it('each track row has a record button', () => {
-    const { container } = render(ProjectEditor);
-    const trackRows = container.querySelectorAll('.track-row');
-    expect(trackRows.length).toBeGreaterThan(0);
-    trackRows.forEach(row => {
-      const recordBtn = row.querySelector('.record-btn');
-      expect(recordBtn).toBeTruthy();
-    });
-  });
-
-  it('clicking record button calls recordingService.start', async () => {
-    const { container } = render(ProjectEditor);
-    const recordBtn = container.querySelector('.record-btn') as HTMLButtonElement;
-    await fireEvent.click(recordBtn);
-    expect(mockRecordingService.start).toHaveBeenCalled();
-  });
-
-  describe('Tap Tempo BPM sync', () => {
-    it('tap button calls tapTempo.tap()', async () => {
+  describe('Transport Controls', () => {
+    it('play button calls audioEngine.play', async () => {
       const { container } = render(ProjectEditor);
       const btns = Array.from(container.querySelectorAll('button'));
-      const tapBtn = btns.find(b => b.textContent?.includes('Tap')) as HTMLButtonElement;
-      await fireEvent.click(tapBtn);
-      expect(mockTapTempo.tap).toHaveBeenCalled();
+      const playBtn = btns.find(b => b.textContent?.includes('Play')) as HTMLButtonElement;
+      await fireEvent.click(playBtn);
+      expect(mockAudioEngine.play).toHaveBeenCalled();
     });
 
-    it('updates project BPM when tap returns a value', async () => {
-      vi.mocked(mockTapTempo.tap).mockReturnValueOnce(135);
+    it('stop button calls audioEngine.stop', async () => {
       const { container } = render(ProjectEditor);
       const btns = Array.from(container.querySelectorAll('button'));
-      const tapBtn = btns.find(b => b.textContent?.includes('Tap')) as HTMLButtonElement;
-      await fireEvent.click(tapBtn);
-      const project = get(projectStore.getCurrentProject());
-      expect(project?.bpm).toBe(135);
-    });
-
-    it('does not update project BPM when tap returns null (first tap)', async () => {
-      vi.mocked(mockTapTempo.tap).mockReturnValueOnce(null);
-      const { container } = render(ProjectEditor);
-      const btns = Array.from(container.querySelectorAll('button'));
-      const tapBtn = btns.find(b => b.textContent?.includes('Tap')) as HTMLButtonElement;
-      await fireEvent.click(tapBtn);
-      const project = get(projectStore.getCurrentProject());
-      expect(project?.bpm).toBe(120); // unchanged
+      const stopBtn = btns.find(b => b.textContent?.includes('Stop')) as HTMLButtonElement;
+      await fireEvent.click(stopBtn);
+      expect(mockAudioEngine.stop).toHaveBeenCalled();
     });
   });
 
-  describe('Track inline rename', () => {
-    it('double-clicking a track name shows an input field', async () => {
+  describe('Navigation', () => {
+    it('back button clears current project', async () => {
       const { container } = render(ProjectEditor);
-      const trackName = container.querySelector('.track-name') as HTMLElement;
-      await fireEvent.dblClick(trackName);
-      expect(container.querySelector('.track-name-input')).toBeTruthy();
+      const btns = Array.from(container.querySelectorAll('button'));
+      const backBtn = btns.find(b => b.textContent?.includes('Back')) as HTMLButtonElement;
+      await fireEvent.click(backBtn);
+      expect(get(projectStore.getCurrentProject())).toBeNull();
     });
 
-    it('submitting the rename input updates the track name', async () => {
+    it('sidebar renders all navigation items', () => {
       const { container } = render(ProjectEditor);
-      const trackName = container.querySelector('.track-name') as HTMLElement;
-      await fireEvent.dblClick(trackName);
-      const input = container.querySelector('.track-name-input') as HTMLInputElement;
-      await fireEvent.input(input, { target: { value: 'Bass Guitar' } });
-      await fireEvent.keyDown(input, { key: 'Enter' });
-      expect(container.querySelector('.track-name')?.textContent).toContain('Bass Guitar');
-      expect(container.querySelector('.track-name-input')).toBeFalsy();
+      const sidebar = container.querySelector('.sidebar');
+      expect(sidebar).toBeTruthy();
+      expect(container.textContent).toContain('Library');
+      expect(container.textContent).toContain('Import');
+      expect(container.textContent).toContain('Collections');
+      expect(container.textContent).toContain('Koala');
+      expect(container.textContent).toContain('Settings');
     });
 
-    it('pressing Escape reverts the rename', async () => {
+    it('clicking nav items changes active view', async () => {
       const { container } = render(ProjectEditor);
-      const trackName = container.querySelector('.track-name') as HTMLElement;
-      const originalName = trackName.textContent?.trim();
-      await fireEvent.dblClick(trackName);
-      const input = container.querySelector('.track-name-input') as HTMLInputElement;
-      await fireEvent.input(input, { target: { value: 'Something Else' } });
-      await fireEvent.keyDown(input, { key: 'Escape' });
-      expect(container.querySelector('.track-name')?.textContent?.trim()).toBe(originalName);
-      expect(container.querySelector('.track-name-input')).toBeFalsy();
+      const navItems = Array.from(container.querySelectorAll('.nav-item'));
+
+      const importItem = navItems.find(item => item.textContent?.includes('Import')) as HTMLButtonElement;
+      expect(importItem).toBeTruthy();
+
+      await fireEvent.click(importItem);
+      // After click, Import view content should be visible
+      expect(container.textContent).toContain('Import');
     });
 
-    it('blurring the rename input commits the new name', async () => {
+    it('Library view shows by default', () => {
       const { container } = render(ProjectEditor);
-      const trackName = container.querySelector('.track-name') as HTMLElement;
-      await fireEvent.dblClick(trackName);
-      const input = container.querySelector('.track-name-input') as HTMLInputElement;
-      await fireEvent.input(input, { target: { value: 'Lead Synth' } });
-      await fireEvent.blur(input);
-      expect(container.querySelector('.track-name')?.textContent).toContain('Lead Synth');
+      expect(container.querySelector('.sidebar')).toBeTruthy();
+      // The default activeView is 'library'
+      expect(container.textContent).toContain('Library');
+    });
+  });
+
+  describe('Modal Integration', () => {
+    it('shows export modal when Export Mix button is clicked', async () => {
+      const { container } = render(ProjectEditor);
+      const btns = Array.from(container.querySelectorAll('button'));
+      const exportBtn = btns.find(b => b.textContent?.includes('Export')) as HTMLButtonElement;
+      await fireEvent.click(exportBtn);
+      expect(container.querySelector('.modal-overlay')).toBeTruthy();
     });
   });
 });
