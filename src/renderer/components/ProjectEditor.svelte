@@ -20,7 +20,7 @@
   import YouTubeImportModal from './YouTubeImportModal.svelte';
   import ExportModal from './ExportModal.svelte';
   import Sidebar from './Sidebar.svelte';
-  import FilesView from './FilesView.svelte';
+  import LibraryView from './LibraryView.svelte';
   import ImportView from './ImportView.svelte';
   import CollectionsView from './CollectionsView.svelte';
   import KoalaKitBuilder from './KoalaKitBuilder.svelte';
@@ -41,6 +41,7 @@
   let dragOverIndex: number | null = null;
   let activeView = 'library';
   let selectedFilePath: string | null = null;
+  let selectedFileName: string | null = null;
   let tracks: any[] = [
     { id: '1', name: 'Track 1', volume: 0.8, muted: false, solo: false, hasAudio: false },
     { id: '2', name: 'Track 2', volume: 0.7, muted: false, solo: false, hasAudio: false },
@@ -303,6 +304,13 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
+  function handleLibraryEdit(e: CustomEvent<{ asset: any }>) {
+    const { asset } = e.detail;
+    selectedFilePath = asset.file_path;
+    selectedFileName = asset.name;
+    activeView = 'wave-editor';
+  }
+
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />
@@ -441,7 +449,7 @@
         <!-- View Content -->
         <div class="view-content">
           {#if activeView === 'library'}
-            <FilesView />
+            <LibraryView on:edit={handleLibraryEdit} />
           {:else if activeView === 'import'}
             <ImportView />
           {:else if activeView === 'collections'}
@@ -457,7 +465,7 @@
               </div>
             </div>
           {:else if activeView === 'wave-editor'}
-            <WaveEditor />
+            <WaveEditor filePath={selectedFilePath || ''} fileName={selectedFileName || ''} />
           {/if}
         </div>
       </div>
