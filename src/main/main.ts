@@ -187,7 +187,7 @@ function setupJobExecutor(window: BrowserWindow): void {
     ['sync-media', async (job: any, onProgress: Function) => {
       const { videoPath, audioPath, outputPath } = job.payload as any;
       onProgress(10, 'finding offset');
-      const { offsetSec } = await mediaSyncService.findOffset(audioPath, audioPath);
+      const { offsetSec } = await mediaSyncService.findOffset(videoPath, audioPath);
       onProgress(50, 'syncing');
       const result = await mediaSyncService.syncAudioWithVideo(videoPath, audioPath, offsetSec, outputPath);
       onProgress(100, 'done');

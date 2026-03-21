@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import Modal from './ui/Modal.svelte';
   import Button from './ui/Button.svelte';
 
@@ -21,6 +21,15 @@
   let progressText = '';
 
   const af = (window as any).audioforge;
+
+  // Tracks all active event unsub functions so onDestroy can clean up
+  // if the modal is closed mid-download (prevents listener leaks).
+  let activeUnsubs: Array<() => void> = [];
+
+  onDestroy(() => {
+    activeUnsubs.forEach(fn => fn());
+    activeUnsubs = [];
+  });
 
   function formatDuration(secs: number): string {
     const m = Math.floor(secs / 60);
