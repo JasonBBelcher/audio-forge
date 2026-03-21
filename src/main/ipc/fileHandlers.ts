@@ -1,6 +1,5 @@
 import type { IpcMain } from 'electron';
-import { dialog } from 'electron';
-import fs from 'fs';
+import { readFileSync } from 'fs';
 import type { FileService } from '../services/file.service.js';
 import type { AnalysisPipelineService } from '../services/analysis-pipeline.service.js';
 import type { QueueService } from '../services/queue.service.js';
@@ -11,28 +10,16 @@ export function registerFileHandlers(
   analysisPipelineService: AnalysisPipelineService,
   queueService: QueueService
 ): void {
-  ipcMain.handle('files:showOpenDialog', async (_event, options: Electron.OpenDialogOptions) => {
-    return dialog.showOpenDialog(options);
-  });
-
-  ipcMain.handle('files:showSaveDialog', async (_event, options: Electron.SaveDialogOptions) => {
-    return dialog.showSaveDialog(options);
-  });
+  // files:showOpenDialog, files:showSaveDialog, files:writeFile are registered
+  // in main.ts where mainWindow is in scope for proper dialog parenting.
 
   ipcMain.handle('files:getMediaDir', async () => {
-    // Media dir path is available through fileService if needed
-    // For now, just return a success indicator
     return { success: true };
   });
 
   ipcMain.handle('files:readAsArrayBuffer', async (_event, filePath: string) => {
-    const fileContent = fs.readFileSync(filePath);
+    const fileContent = readFileSync(filePath);
     return fileContent.buffer;
-  });
-
-  ipcMain.handle('files:writeFile', async (_event, filePath: string, data: Uint8Array) => {
-    fs.writeFileSync(filePath, Buffer.from(data));
-    return { success: true };
   });
 
   ipcMain.handle('files:import', async (_event, filePaths: string[]) => {
