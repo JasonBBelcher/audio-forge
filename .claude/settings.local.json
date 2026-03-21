@@ -3,7 +3,11 @@
     "allow": [
       "Bash(*)",
       "Skill(update-config)",
-      "Skill(update-config:*)"
+      "Skill(update-config:*)",
+      "WebSearch",
+      "WebFetch(domain:manual.koalasampler.com)",
+      "WebFetch(domain:www.koalasampler.com)",
+      "WebFetch(domain:www.kit-maker.com)"
     ]
   }
 }

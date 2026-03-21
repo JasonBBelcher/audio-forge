@@ -86,6 +86,14 @@ const api = {
     initialize: (id: string) => ipcRenderer.invoke('hardware:initialize', id),
     teardown: (id: string) => ipcRenderer.invoke('hardware:teardown', id),
   },
+  koala: {
+    exportKit: (kit: object, syncFolder: string) =>
+      ipcRenderer.invoke('koala:exportKit', kit, syncFolder),
+    listKits: (syncFolder: string) =>
+      ipcRenderer.invoke('koala:listKits', syncFolder),
+    deleteKit: (kitName: string, syncFolder: string) =>
+      ipcRenderer.invoke('koala:deleteKit', kitName, syncFolder),
+  },
   midi: {},
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);

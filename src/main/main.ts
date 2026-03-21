@@ -19,6 +19,7 @@ import { PlatformService } from './services/platform.service.js';
 import { JobExecutor } from './services/job-executor.js';
 import { MediaSyncService } from './services/media-sync.service.js';
 import { AdapterRegistry } from './services/hardware-adapter.js';
+import { KoalaService } from './services/koala.service.js';
 import { registerProjectHandlers } from './ipc/projectHandlers.js';
 import { registerSettingsHandlers } from './ipc/settingsHandlers.js';
 import { registerHealthHandlers } from './ipc/healthHandlers.js';
@@ -30,6 +31,7 @@ import { registerSyncHandlers } from './ipc/syncHandlers.js';
 import { registerPlatformHandlers } from './ipc/platformHandlers.js';
 import { registerHardwareHandlers } from './ipc/hardwareHandlers.js';
 import { registerMediaSyncHandlers } from './ipc/mediaSyncHandlers.js';
+import { registerKoalaHandlers } from './ipc/koalaHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -49,6 +51,7 @@ const syncService = new SyncService(paths.database);
 const platformService = new PlatformService(paths.database);
 const mediaSyncService = new MediaSyncService();
 const adapterRegistry = new AdapterRegistry();
+const koalaService = new KoalaService();
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -62,6 +65,7 @@ registerSyncHandlers(ipcMain, syncService);
 registerPlatformHandlers(ipcMain, platformService);
 registerMediaSyncHandlers(ipcMain, mediaSyncService);
 registerHardwareHandlers(ipcMain, adapterRegistry);
+registerKoalaHandlers(ipcMain, koalaService);
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
