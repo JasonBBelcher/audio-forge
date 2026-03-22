@@ -200,6 +200,20 @@ const api = {
     install: () =>
       ipcRenderer.invoke('audioToMidi:install'),
   },
+  harmonic: {
+    getCompatibleKeys: (key: string) =>
+      ipcRenderer.invoke('harmonic:getCompatibleKeys', key),
+    findCompatibleAssets: (key: string, assets: any[]) =>
+      ipcRenderer.invoke('harmonic:findCompatibleAssets', key, assets),
+    getCode: (key: string) =>
+      ipcRenderer.invoke('harmonic:getCode', key),
+  },
+  loop: {
+    detect: (filePath: string, bpm?: number) =>
+      ipcRenderer.invoke('loop:detect', filePath, bpm),
+    extract: (filePath: string, loop: any, outputPath?: string) =>
+      ipcRenderer.invoke('loop:extract', filePath, loop, outputPath),
+  },
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);
     ipcRenderer.on(channel, handler);

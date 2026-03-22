@@ -50,6 +50,10 @@ import { ModelRegistry } from './services/model-adapter.js';
 import { StableAudioAdapter } from './services/adapters/stable-audio.adapter.js';
 import { GenerationService } from './services/generation.service.js';
 import { registerGenerationHandlers } from './ipc/generationHandlers.js';
+import { CamelotService } from './services/camelot.service.js';
+import { registerHarmonicHandlers } from './ipc/harmonicHandlers.js';
+import { LoopDetectorService } from './services/loop-detector.service.js';
+import { registerLoopHandlers } from './ipc/loopHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -81,6 +85,8 @@ const modelRegistry = new ModelRegistry();
 const stableAudioAdapter = new StableAudioAdapter();
 modelRegistry.register(stableAudioAdapter);
 const generationService = new GenerationService(modelRegistry, fileService);
+const camelotService = new CamelotService();
+const loopDetectorService = new LoopDetectorService();
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -101,6 +107,8 @@ registerCollectionHandlers(ipcMain, collectionService);
 registerFileHandlers(ipcMain, fileService, analysisPipelineService, queueService);
 registerGenerationHandlers(ipcMain, generationService, queueService);
 registerAudioToMidiHandlers(ipcMain, audioToMidiService, midiFilesService, queueService);
+registerHarmonicHandlers(ipcMain, camelotService);
+registerLoopHandlers(ipcMain, loopDetectorService);
 // Note: registerWatcherHandlers and registerMidiHandlers are called in createWindow() after mainWindow is set
 
 function ensureDir(dir: string) {
