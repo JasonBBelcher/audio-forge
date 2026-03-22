@@ -1,5 +1,4 @@
 import type { IpcMain } from 'electron';
-import { readFileSync } from 'fs';
 import type { FileService } from '../services/file.service.js';
 import type { AnalysisPipelineService } from '../services/analysis-pipeline.service.js';
 import type { QueueService } from '../services/queue.service.js';
@@ -10,17 +9,9 @@ export function registerFileHandlers(
   analysisPipelineService: AnalysisPipelineService,
   queueService: QueueService
 ): void {
-  // files:showOpenDialog, files:showSaveDialog, files:writeFile are registered
-  // in main.ts where mainWindow is in scope for proper dialog parenting.
-
-  ipcMain.handle('files:getMediaDir', async () => {
-    return { success: true };
-  });
-
-  ipcMain.handle('files:readAsArrayBuffer', async (_event, filePath: string) => {
-    const fileContent = readFileSync(filePath);
-    return fileContent.buffer;
-  });
+  // files:showOpenDialog, files:showSaveDialog, files:writeFile,
+  // files:getMediaDir, files:readAsArrayBuffer are registered in main.ts
+  // where mainWindow and getAppPaths() are in scope.
 
   ipcMain.handle('files:import', async (_event, filePaths: string[]) => {
     const results = [];
