@@ -603,8 +603,8 @@
             {#each filteredAssets as asset (asset.id)}
               <tr oncontextmenu={(e) => handleRowContextMenu(e, asset)}>
                 <td class="col-name">
-                  <span class="play-btn" onclick={(e) => handlePlayClick(e, asset)}>▶</span>
-                  <span class="asset-name" onclick={() => handleRowClick(asset)}>{asset.name}</span>
+                  <button class="play-btn" type="button" onclick={(e) => handlePlayClick(e, asset)} aria-label="Preview {asset.name}">▶</button>
+                  <button class="asset-name" type="button" onclick={() => handleRowClick(asset)}>{asset.name}</button>
                 </td>
                 <td class="col-waveform">
                   <WaveformSparkline peaks={peaksCache.get(asset.id) ?? []} width={80} height={24} />

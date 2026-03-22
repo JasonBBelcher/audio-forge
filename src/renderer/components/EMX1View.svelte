@@ -177,8 +177,8 @@
     <h2>MIDI Ports</h2>
     <div class="port-controls">
       <div class="port-group">
-        <label>Input:</label>
-        <select bind:value={selectedInputPort} disabled={connected}>
+        <label for="emx1-input">Input:</label>
+        <select id="emx1-input" bind:value={selectedInputPort} disabled={connected}>
           {#each inputPorts as port}
             <option value={port}>{port}</option>
           {/each}
@@ -186,8 +186,8 @@
       </div>
 
       <div class="port-group">
-        <label>Output:</label>
-        <select bind:value={selectedOutputPort} disabled={connected}>
+        <label for="emx1-output">Output:</label>
+        <select id="emx1-output" bind:value={selectedOutputPort} disabled={connected}>
           {#each outputPorts as port}
             <option value={port}>{port}</option>
           {/each}
@@ -253,8 +253,8 @@
       <h2>MIDI Clock</h2>
       <div class="clock-controls">
         <div class="bpm-control">
-          <label>BPM:</label>
-          <input type="number" bind:value={bpm} min="20" max="300" />
+          <label for="emx1-bpm">BPM:</label>
+          <input id="emx1-bpm" type="number" bind:value={bpm} min="20" max="300" />
         </div>
         <div class="clock-actions">
           <Button onclick={handleStart}>▶ Start</Button>

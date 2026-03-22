@@ -767,8 +767,7 @@
     flex-direction: column;
   }
 
-  .arrange-header,
-  .mixer h2 {
+  .arrange-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -820,10 +819,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
-  }
-
-  .track-info h3 {
-    margin: 0;
   }
 
   .track-name {

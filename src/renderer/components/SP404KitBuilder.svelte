@@ -27,7 +27,7 @@
   onMount(async () => {
     // Load SD card path from settings
     if ((window as any).audioforge?.settings?.get) {
-      sdCardPath = (window as any).audioforge.settings.get('sp404.sdCardPath', '');
+      sdCardPath = await (window as any).audioforge.settings.get('sp404.sdCardPath') ?? '';
     }
 
     // Initialize pads
@@ -383,7 +383,7 @@
   {#if showSamplePicker}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="sample-picker-overlay" onclick={closeSamplePicker} role="dialog" aria-modal="true">
+    <div class="sample-picker-overlay" onclick={closeSamplePicker} role="dialog" aria-modal="true" tabindex="-1">
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="sample-picker" onclick={(e) => e.stopPropagation()}>
@@ -398,8 +398,6 @@
             placeholder="Search samples..."
             value={searchQuery}
             oninput={handleSearchChange}
-            /* svelte-ignore a11y_autofocus */
-            autofocus
           />
         </div>
 
