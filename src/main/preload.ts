@@ -56,6 +56,9 @@ const api = {
     writeFile: (filePath: string, data: Uint8Array) => ipcRenderer.invoke('files:writeFile', filePath, data),
     getMediaDir: () => ipcRenderer.invoke('files:getMediaDir'),
     readAsArrayBuffer: (filePath: string) => ipcRenderer.invoke('files:readAsArrayBuffer', filePath),
+    list: () => ipcRenderer.invoke('files:list'),
+    search: (query: string) => ipcRenderer.invoke('files:search', query),
+    delete: (assetId: number) => ipcRenderer.invoke('files:delete', assetId),
     import: (filePaths: string[]) => ipcRenderer.invoke('files:import', filePaths),
     analyzeAll: () => ipcRenderer.invoke('files:analyzeAll'),
   },
@@ -108,12 +111,14 @@ const api = {
     teardown: (id: string) => ipcRenderer.invoke('hardware:teardown', id),
   },
   koala: {
-    exportKit: (kit: object, syncFolder: string) =>
-      ipcRenderer.invoke('koala:exportKit', kit, syncFolder),
-    listKits: (syncFolder: string) =>
-      ipcRenderer.invoke('koala:listKits', syncFolder),
-    deleteKit: (kitName: string, syncFolder: string) =>
-      ipcRenderer.invoke('koala:deleteKit', kitName, syncFolder),
+    exportKit: (kit: object, exportFolder: string) =>
+      ipcRenderer.invoke('koala:exportKit', kit, exportFolder),
+    listKits: (exportFolder: string) =>
+      ipcRenderer.invoke('koala:listKits', exportFolder),
+    deleteKit: (kitName: string, exportFolder: string) =>
+      ipcRenderer.invoke('koala:deleteKit', kitName, exportFolder),
+    openInFinder: (folderPath: string) =>
+      ipcRenderer.invoke('koala:openInFinder', folderPath),
   },
   sp404: {
     exportKit: (kit: object, sdCardPath: string) =>

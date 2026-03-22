@@ -59,10 +59,10 @@ describe('koalaHandlers', () => {
           { bank: 'A', pad: 1, samplePath: '/path/to/sample.wav' },
         ],
       };
-      const syncFolder = '/sync/folder';
+      const exportFolder = '/export/folder';
 
       mockKoalaService.exportKit.mockResolvedValue({
-        outputPath: '/sync/folder/test-kit',
+        outputPath: '/export/folder/test-kit',
         padCount: 1,
       });
 
@@ -74,18 +74,18 @@ describe('koalaHandlers', () => {
       );
       const handler = handleCall[1];
 
-      const result = await handler({}, kit, syncFolder);
+      const result = await handler({}, kit, exportFolder);
 
-      expect(mockKoalaService.exportKit).toHaveBeenCalledWith(kit, syncFolder);
+      expect(mockKoalaService.exportKit).toHaveBeenCalledWith(kit, exportFolder);
       expect(result).toEqual({
-        outputPath: '/sync/folder/test-kit',
+        outputPath: '/export/folder/test-kit',
         padCount: 1,
       });
     });
 
     it('throws error when exportKit fails', async () => {
       const kit: KoalaKit = { name: 'test-kit', pads: [] };
-      const syncFolder = '/sync/folder';
+      const exportFolder = '/export/folder';
       const error = new Error('Export failed');
 
       mockKoalaService.exportKit.mockRejectedValue(error);
@@ -97,13 +97,13 @@ describe('koalaHandlers', () => {
       );
       const handler = handleCall[1];
 
-      await expect(handler({}, kit, syncFolder)).rejects.toThrow('Export failed');
+      await expect(handler({}, kit, exportFolder)).rejects.toThrow('Export failed');
     });
   });
 
   describe('koala:listKits handler', () => {
     it('delegates to koalaService.listKits', async () => {
-      const syncFolder = '/sync/folder';
+      const exportFolder = '/export/folder';
       const expectedKits = ['kit-1', 'kit-2', 'kit-3'];
 
       mockKoalaService.listKits.mockResolvedValue(expectedKits);
@@ -115,9 +115,9 @@ describe('koalaHandlers', () => {
       );
       const handler = handleCall[1];
 
-      const result = await handler({}, syncFolder);
+      const result = await handler({}, exportFolder);
 
-      expect(mockKoalaService.listKits).toHaveBeenCalledWith(syncFolder);
+      expect(mockKoalaService.listKits).toHaveBeenCalledWith(exportFolder);
       expect(result).toEqual(expectedKits);
     });
   });
@@ -125,7 +125,7 @@ describe('koalaHandlers', () => {
   describe('koala:deleteKit handler', () => {
     it('delegates to koalaService.deleteKit', async () => {
       const kitName = 'test-kit';
-      const syncFolder = '/sync/folder';
+      const exportFolder = '/export/folder';
 
       mockKoalaService.deleteKit.mockResolvedValue(undefined);
 
@@ -136,14 +136,14 @@ describe('koalaHandlers', () => {
       );
       const handler = handleCall[1];
 
-      await handler({}, kitName, syncFolder);
+      await handler({}, kitName, exportFolder);
 
-      expect(mockKoalaService.deleteKit).toHaveBeenCalledWith(kitName, syncFolder);
+      expect(mockKoalaService.deleteKit).toHaveBeenCalledWith(kitName, exportFolder);
     });
 
     it('throws error when deleteKit fails', async () => {
       const kitName = 'nonexistent-kit';
-      const syncFolder = '/sync/folder';
+      const exportFolder = '/export/folder';
       const error = new Error('Kit not found');
 
       mockKoalaService.deleteKit.mockRejectedValue(error);
@@ -155,7 +155,7 @@ describe('koalaHandlers', () => {
       );
       const handler = handleCall[1];
 
-      await expect(handler({}, kitName, syncFolder)).rejects.toThrow('Kit not found');
+      await expect(handler({}, kitName, exportFolder)).rejects.toThrow('Kit not found');
     });
   });
 });

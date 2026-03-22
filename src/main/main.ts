@@ -145,16 +145,6 @@ function createWindow(): void {
   registerWatcherHandlers(ipcMain, folderWatcherService, mainWindow);
   registerMidiHandlers(ipcMain, midiFilesService, mainWindow);
 
-  // Auto-start watching the Koala sync folder if it's configured
-  const koalaSyncFolder = settingsService.get('koalaSyncFolder') as string | undefined;
-  if (koalaSyncFolder) {
-    try {
-      folderWatcherService.watchFolder(koalaSyncFolder);
-    } catch (error) {
-      console.error(`Failed to start watching Koala sync folder: ${koalaSyncFolder}`, error);
-    }
-  }
-
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();

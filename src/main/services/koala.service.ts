@@ -78,16 +78,16 @@ export class KoalaService {
   }
 
   /**
-   * Exports a Koala kit to the sync folder with the structure:
-   * {syncFolder}/{kitName}/Bank A/01.wav ... 16.wav
-   * {syncFolder}/{kitName}/Bank B/01.wav ... 16.wav
-   * {syncFolder}/{kitName}/Bank C/01.wav ... 16.wav
-   * {syncFolder}/{kitName}/Bank D/01.wav ... 16.wav
+   * Exports a Koala kit to the export folder with the structure:
+   * {exportFolder}/{kitName}/Bank A/01.wav ... 16.wav
+   * {exportFolder}/{kitName}/Bank B/01.wav ... 16.wav
+   * {exportFolder}/{kitName}/Bank C/01.wav ... 16.wav
+   * {exportFolder}/{kitName}/Bank D/01.wav ... 16.wav
    *
    * Empty pads (no samplePath) are skipped (no file written).
    */
-  async exportKit(kit: KoalaKit, syncFolder: string): Promise<ExportKitResult> {
-    const kitPath = path.join(syncFolder, kit.name);
+  async exportKit(kit: KoalaKit, exportFolder: string): Promise<ExportKitResult> {
+    const kitPath = path.join(exportFolder, kit.name);
 
     // Create kit root directory
     if (!fs.existsSync(kitPath)) {
@@ -139,15 +139,15 @@ export class KoalaService {
   }
 
   /**
-   * Lists all kit folders (subfolders) in the sync folder.
+   * Lists all kit folders (subfolders) in the export folder.
    * Returns kit names, excluding files.
    */
-  async listKits(syncFolder: string): Promise<string[]> {
-    if (!fs.existsSync(syncFolder)) {
+  async listKits(exportFolder: string): Promise<string[]> {
+    if (!fs.existsSync(exportFolder)) {
       return [];
     }
 
-    const entries = fs.readdirSync(syncFolder, { withFileTypes: true });
+    const entries = fs.readdirSync(exportFolder, { withFileTypes: true });
     const kits = entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
@@ -159,12 +159,12 @@ export class KoalaService {
   /**
    * Deletes a kit folder and all its contents recursively.
    */
-  async deleteKit(kitName: string, syncFolder: string): Promise<void> {
-    if (!fs.existsSync(syncFolder)) {
-      throw new Error(`Sync folder does not exist: ${syncFolder}`);
+  async deleteKit(kitName: string, exportFolder: string): Promise<void> {
+    if (!fs.existsSync(exportFolder)) {
+      throw new Error(`Export folder does not exist: ${exportFolder}`);
     }
 
-    const kitPath = path.join(syncFolder, kitName);
+    const kitPath = path.join(exportFolder, kitName);
 
     if (!fs.existsSync(kitPath)) {
       throw new Error(`Kit not found: ${kitName}`);

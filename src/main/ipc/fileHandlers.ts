@@ -44,6 +44,18 @@ export function registerFileHandlers(
     return results;
   });
 
+  ipcMain.handle('files:list', async () => {
+    return fileService.listFiles();
+  });
+
+  ipcMain.handle('files:search', async (_event, query: string) => {
+    return fileService.searchFiles(query);
+  });
+
+  ipcMain.handle('files:delete', async (_event, assetId: number) => {
+    return fileService.deleteAsset(assetId);
+  });
+
   ipcMain.handle('files:analyzeAll', async () => {
     try {
       const jobId = queueService.enqueue('analyze-audio-all', {});

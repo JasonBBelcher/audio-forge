@@ -3,7 +3,7 @@
   import KoalaKitBuilder from './KoalaKitBuilder.svelte';
 
   let kits: string[] = [];
-  let syncFolder: string = '';
+  let exportFolder: string = '';
   let isLoadingKits: boolean = true;
 
   onMount(async () => {
@@ -14,11 +14,11 @@
     isLoadingKits = true;
     try {
       if ((window as any).audioforge?.settings?.get) {
-        syncFolder = (window as any).audioforge.settings.get('koala.syncFolder', '');
+        exportFolder = (window as any).audioforge.settings.get('koala.exportFolder', '');
       }
 
-      if (syncFolder && (window as any).audioforge?.koala?.listKits) {
-        kits = await (window as any).audioforge.koala.listKits(syncFolder);
+      if (exportFolder && (window as any).audioforge?.koala?.listKits) {
+        kits = await (window as any).audioforge.koala.listKits(exportFolder);
       }
     } catch (error) {
       console.error('Failed to load kits:', error);
@@ -39,11 +39,22 @@
 
     try {
       if ((window as any).audioforge?.koala?.deleteKit) {
-        await (window as any).audioforge.koala.deleteKit(kitName, syncFolder);
+        await (window as any).audioforge.koala.deleteKit(kitName, exportFolder);
         await loadKitsAndFolder();
       }
     } catch (error) {
       console.error('Failed to delete kit:', error);
+    }
+  }
+
+  async function handleOpenKitInFinder(kitName: string) {
+    try {
+      const kitPath = `${exportFolder}/${kitName}`;
+      if ((window as any).audioforge?.koala?.openInFinder) {
+        await (window as any).audioforge.koala.openInFinder(kitPath);
+      }
+    } catch (error) {
+      console.error('Failed to open kit in Finder:', error);
     }
   }
 </script>
@@ -55,10 +66,13 @@
 
   <div class="koala-content">
     <!-- Existing Kits Panel -->
-    {#if syncFolder}
+    {#if exportFolder}
       <aside class="kits-panel">
         <div class="panel-header">
-          <h2>Kits</h2>
+          <div class="panel-title">
+            <h2>Exported Kits</h2>
+            <p class="panel-subtitle">(click to open in Finder)</p>
+          </div>
           <button class="refresh-btn" onclick={handleRefresh} title="Refresh kits list">
             ↻
           </button>
@@ -71,11 +85,11 @@
         {:else}
           <div class="kits-list">
             {#each kits as kit (kit)}
-              <div class="kit-item">
+              <div class="kit-item" onclick={() => handleOpenKitInFinder(kit)}>
                 <span class="kit-name">{kit}</span>
                 <button
                   class="delete-kit-btn"
-                  onclick={() => handleDeleteKit(kit)}
+                  onclick={(e) => { e.stopPropagation(); handleDeleteKit(kit); }}
                   title="Delete kit"
                 >
                   ×
@@ -135,9 +149,16 @@
   .panel-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     padding: 16px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .panel-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
   }
 
   .panel-header h2 {
@@ -146,6 +167,14 @@
     font-weight: 600;
     color: rgba(255, 255, 255, 0.8);
     text-transform: uppercase;
+  }
+
+  .panel-subtitle {
+    margin: 0;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+    text-transform: none;
   }
 
   .refresh-btn {
@@ -195,11 +224,12 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     transition: all 0.2s ease;
+    cursor: pointer;
   }
 
   .kit-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(100, 181, 246, 0.15);
+    border-color: rgba(100, 181, 246, 0.3);
   }
 
   .kit-name {

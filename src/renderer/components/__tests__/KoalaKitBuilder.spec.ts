@@ -27,7 +27,7 @@ describe('KoalaKitBuilder Component', () => {
       },
       files: {
         getMediaDir: vi.fn().mockResolvedValue('/media'),
-        showOpenDialog: vi.fn().mockResolvedValue({ filePaths: ['/path/to/sync'] }),
+        showOpenDialog: vi.fn().mockResolvedValue({ filePaths: ['/path/to/export'] }),
       },
     };
     (window as any).audioforge = mockAf;
@@ -85,9 +85,9 @@ describe('KoalaKitBuilder Component', () => {
       expect(clearBtn).toBeTruthy();
     });
 
-    it('renders sync folder display', () => {
+    it('renders export folder display', () => {
       const { container } = render(KoalaKitBuilder);
-      expect(container.textContent).toContain('Sync Folder') || expect(container.textContent).toContain('sync');
+      expect(container.textContent).toContain('Export Folder') || expect(container.textContent).toContain('export');
     });
   });
 
@@ -280,7 +280,7 @@ describe('KoalaKitBuilder Component', () => {
     });
 
     it('calls exportKit with correct kit structure', async () => {
-      mockAf.settings.get.mockResolvedValue('/sync');
+      mockAf.settings.get.mockResolvedValue('/export');
       mockAf.assets.list.mockResolvedValue([
         { id: 1, name: 'kick.wav', file_path: '/samples/kick.wav', file_type: 'audio', file_size: 2048 },
       ]);
@@ -325,7 +325,7 @@ describe('KoalaKitBuilder Component', () => {
     });
 
     it('shows success message on export completion', async () => {
-      mockAf.settings.get.mockResolvedValue('/sync');
+      mockAf.settings.get.mockResolvedValue('/export');
       mockAf.assets.list.mockResolvedValue([
         { id: 1, name: 'kick.wav', file_path: '/samples/kick.wav', file_type: 'audio', file_size: 2048 },
       ]);
@@ -357,7 +357,7 @@ describe('KoalaKitBuilder Component', () => {
     });
 
     it('shows error message on export failure', async () => {
-      mockAf.settings.get.mockResolvedValue('/sync');
+      mockAf.settings.get.mockResolvedValue('/export');
       mockAf.assets.list.mockResolvedValue([
         { id: 1, name: 'kick.wav', file_path: '/samples/kick.wav', file_type: 'audio', file_size: 2048 },
       ]);
@@ -426,22 +426,22 @@ describe('KoalaKitBuilder Component', () => {
     });
   });
 
-  describe('Sync Folder', () => {
-    it('loads sync folder from settings on mount', async () => {
-      mockAf.settings.get.mockResolvedValue('/path/to/koala/sync');
+  describe('Export Folder', () => {
+    it('loads export folder from settings on mount', async () => {
+      mockAf.settings.get.mockResolvedValue('/path/to/koala/export');
 
       const { container } = render(KoalaKitBuilder);
       await new Promise(r => setTimeout(r, 50));
 
-      expect(mockAf.settings.get).toHaveBeenCalledWith('koala.syncFolder');
+      expect(mockAf.settings.get).toHaveBeenCalledWith('koala.exportFolder');
     });
 
-    it('shows "Not set" when no sync folder configured', () => {
+    it('shows "Not set" when no export folder configured', () => {
       mockAf.settings.get.mockResolvedValue('');
 
       const { container } = render(KoalaKitBuilder);
 
-      expect(container.textContent).toContain('Not set') || expect(container.textContent).toContain('sync');
+      expect(container.textContent).toContain('Not set') || expect(container.textContent).toContain('export');
     });
 
     it('change button opens file picker', async () => {
@@ -461,7 +461,7 @@ describe('KoalaKitBuilder Component', () => {
       }
     });
 
-    it('saves new sync folder to settings', async () => {
+    it('saves new export folder to settings', async () => {
       mockAf.settings.get.mockResolvedValue('/path/to/koala');
       mockAf.files.showOpenDialog.mockResolvedValue({ filePaths: ['/new/path'] });
 
@@ -475,7 +475,7 @@ describe('KoalaKitBuilder Component', () => {
         await fireEvent.click(changeBtn);
         await new Promise(r => setTimeout(r, 100));
 
-        expect(mockAf.settings.set).toHaveBeenCalledWith('koala.syncFolder', '/new/path');
+        expect(mockAf.settings.set).toHaveBeenCalledWith('koala.exportFolder', '/new/path');
       }
     });
   });
@@ -488,7 +488,7 @@ describe('KoalaKitBuilder Component', () => {
     });
 
     it('BPM is included in export when provided', async () => {
-      mockAf.settings.get.mockResolvedValue('/sync');
+      mockAf.settings.get.mockResolvedValue('/export');
       mockAf.assets.list.mockResolvedValue([
         { id: 1, name: 'kick.wav', file_path: '/samples/kick.wav', file_type: 'audio', file_size: 2048 },
       ]);
@@ -523,7 +523,7 @@ describe('KoalaKitBuilder Component', () => {
     });
 
     it('BPM is undefined when empty in export', async () => {
-      mockAf.settings.get.mockResolvedValue('/sync');
+      mockAf.settings.get.mockResolvedValue('/export');
       mockAf.assets.list.mockResolvedValue([
         { id: 1, name: 'kick.wav', file_path: '/samples/kick.wav', file_type: 'audio', file_size: 2048 },
       ]);

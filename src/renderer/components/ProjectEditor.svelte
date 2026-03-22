@@ -468,6 +468,8 @@
               <h2>Settings</h2>
             {:else if activeView === 'wave-editor'}
               <h2>Wave Editor</h2>
+            {:else if activeView === 'ai-generate'}
+              <h2>✨ AI Generate</h2>
             {/if}
           </div>
           <div class="top-bar-right">

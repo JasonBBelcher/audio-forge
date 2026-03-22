@@ -11,7 +11,7 @@
 
   let kitName: string = '';
   let bpm: number | undefined = undefined;
-  let syncFolder: string = '';
+  let exportFolder: string = '';
   let pads: Record<string, Asset | null> = {};
   let showSamplePicker: boolean = false;
   let selectedPad: string | null = null;
@@ -20,13 +20,14 @@
   let searchQuery: string = '';
   let isExporting: boolean = false;
   let exportMessage: { type: 'success' | 'error'; text: string } | null = null;
+  let showTipBox: boolean = false;
 
   const banks = ['A', 'B', 'C', 'D'];
 
   onMount(async () => {
-    // Load sync folder from settings
+    // Load export folder from settings
     if ((window as any).audioforge?.settings?.get) {
-      syncFolder = await (window as any).audioforge.settings.get('koala.syncFolder') ?? '';
+      exportFolder = await (window as any).audioforge.settings.get('koala.exportFolder') ?? '';
     }
 
     // Initialize pads
@@ -138,20 +139,20 @@
 
   $: assignedCount = Object.values(pads).filter(Boolean).length;
 
-  async function handleChangeSyncFolder() {
+  async function handleChangeExportFolder() {
     try {
       if ((window as any).audioforge?.files?.showOpenDialog) {
         const result = await (window as any).audioforge.files.showOpenDialog({});
         if (result?.filePaths?.[0]) {
           const newPath = result.filePaths[0];
-          syncFolder = newPath;
+          exportFolder = newPath;
           if ((window as any).audioforge?.settings?.set) {
-            await (window as any).audioforge.settings.set('koala.syncFolder', newPath);
+            await (window as any).audioforge.settings.set('koala.exportFolder', newPath);
           }
         }
       }
     } catch (error) {
-      console.error('Failed to change sync folder:', error);
+      console.error('Failed to change export folder:', error);
     }
   }
 
@@ -177,8 +178,8 @@
       return;
     }
 
-    if (!syncFolder) {
-      exportMessage = { type: 'error', text: 'Please set a sync folder' };
+    if (!exportFolder) {
+      exportMessage = { type: 'error', text: 'Please set an export folder' };
       return;
     }
 
@@ -197,13 +198,14 @@
       };
 
       if ((window as any).audioforge?.koala?.exportKit) {
-        const result = await (window as any).audioforge.koala.exportKit(kit, syncFolder);
+        const result = await (window as any).audioforge.koala.exportKit(kit, exportFolder);
 
-        if (result?.success) {
+        if (result?.success || result?.outputPath) {
           exportMessage = {
             type: 'success',
-            text: `Kit exported to ${result.path} (${assignedPads.length} pads)`,
+            text: `Kit exported to ${result.outputPath || result.path} (${assignedPads.length} pads)`,
           };
+          showTipBox = true;
         } else {
           throw new Error(result?.error || 'Export failed');
         }
@@ -257,14 +259,14 @@
     </div>
   </div>
 
-  <!-- Sync Folder Display -->
-  <div class="sync-folder">
-    <label for="sync-folder-display">Sync Folder</label>
-    <div class="sync-folder-content">
-      <span id="sync-folder-display" class="folder-path">
-        {syncFolder || 'Not set'}
+  <!-- Export Folder Display -->
+  <div class="export-folder">
+    <label for="export-folder-display">Export Folder</label>
+    <div class="export-folder-content">
+      <span id="export-folder-display" class="folder-path">
+        {exportFolder || 'Not set'}
       </span>
-      <button class="change-btn" onclick={handleChangeSyncFolder}>
+      <button class="change-btn" onclick={handleChangeExportFolder}>
         Change
       </button>
     </div>
@@ -274,6 +276,22 @@
   {#if exportMessage}
     <div class={`message message-${exportMessage.type}`}>
       {exportMessage.text}
+    </div>
+  {/if}
+
+  <!-- Tip Box -->
+  {#if showTipBox && exportMessage?.type === 'success'}
+    <div class="tip-box">
+      <div class="tip-header">
+        <span class="tip-icon">💡</span>
+        <span class="tip-title">To load these samples into Koala:</span>
+        <button class="tip-close" onclick={() => showTipBox = false}>×</button>
+      </div>
+      <ul class="tip-list">
+        <li><strong>Mac:</strong> Drag the folder from Finder directly onto Koala pads</li>
+        <li><strong>iPhone/iPad:</strong> Use iCloud Drive, AirDrop, or the Files app</li>
+        <li><strong>In Koala:</strong> tap SAMPLES → ADD LOCATION to pin this folder as a favorite</li>
+      </ul>
     </div>
   {/if}
 
@@ -449,13 +467,13 @@
     border-color: rgba(244, 67, 54, 0.6);
   }
 
-  .sync-folder {
+  .export-folder {
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
-  .sync-folder label {
+  .export-folder label {
     font-size: 11px;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.6);
@@ -463,7 +481,7 @@
     letter-spacing: 0.5px;
   }
 
-  .sync-folder-content {
+  .export-folder-content {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -742,5 +760,64 @@
   .sample-meta {
     font-size: 10px;
     color: rgba(255, 255, 255, 0.5);
+  }
+
+  .tip-box {
+    background: rgba(100, 181, 246, 0.1);
+    border: 1px solid rgba(100, 181, 246, 0.3);
+    border-radius: 4px;
+    padding: 12px;
+    animation: slideIn 0.3s ease;
+  }
+
+  .tip-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .tip-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .tip-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(100, 181, 246, 0.9);
+    flex: 1;
+  }
+
+  .tip-close {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: rgba(100, 181, 246, 0.6);
+    font-size: 16px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .tip-close:hover {
+    color: rgba(100, 181, 246, 0.9);
+  }
+
+  .tip-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+  }
+
+  .tip-list li {
+    margin-bottom: 4px;
+  }
+
+  .tip-list strong {
+    color: rgba(100, 181, 246, 0.8);
   }
 </style>

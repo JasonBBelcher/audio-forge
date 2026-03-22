@@ -118,7 +118,7 @@ describe('KoalaService', () => {
 
   describe('exportKit', () => {
     it('creates Bank A/01.wav for a pad assigned to bank A pad 1', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kit = {
         name: 'test-kit',
         pads: [
@@ -133,15 +133,15 @@ describe('KoalaService', () => {
       // Mock prepSample
       vi.spyOn(service, 'prepSample').mockResolvedValue(undefined);
 
-      const result = await service.exportKit(kit, syncFolder);
+      const result = await service.exportKit(kit, exportFolder);
 
-      const expectedFilePath = path.join(syncFolder, 'test-kit', 'Bank A', '01.wav');
+      const expectedFilePath = path.join(exportFolder, 'test-kit', 'Bank A', '01.wav');
       expect(fs.existsSync(expectedFilePath) || result.outputPath).toBeDefined();
       expect(result.padCount).toBe(1);
     });
 
     it('skips empty pads (no file created for unassigned pads)', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kit = {
         name: 'test-kit',
         pads: [
@@ -165,13 +165,13 @@ describe('KoalaService', () => {
 
       vi.spyOn(service, 'prepSample').mockResolvedValue(undefined);
 
-      const result = await service.exportKit(kit, syncFolder);
+      const result = await service.exportKit(kit, exportFolder);
 
       expect(result.padCount).toBe(2); // Only pads 1 and 3
     });
 
     it('returns correct padCount (number of occupied pads)', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kit = {
         name: 'test-kit',
         pads: [
@@ -184,13 +184,13 @@ describe('KoalaService', () => {
 
       vi.spyOn(service, 'prepSample').mockResolvedValue(undefined);
 
-      const result = await service.exportKit(kit, syncFolder);
+      const result = await service.exportKit(kit, exportFolder);
 
       expect(result.padCount).toBe(3);
     });
 
     it('creates all 4 bank subfolders only for banks that have samples', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kit = {
         name: 'test-kit',
         pads: [
@@ -201,12 +201,12 @@ describe('KoalaService', () => {
 
       vi.spyOn(service, 'prepSample').mockResolvedValue(undefined);
 
-      await service.exportKit(kit, syncFolder);
+      await service.exportKit(kit, exportFolder);
 
-      const bankAPath = path.join(syncFolder, 'test-kit', 'Bank A');
-      const bankBPath = path.join(syncFolder, 'test-kit', 'Bank B');
-      const bankCPath = path.join(syncFolder, 'test-kit', 'Bank C');
-      const bankDPath = path.join(syncFolder, 'test-kit', 'Bank D');
+      const bankAPath = path.join(exportFolder, 'test-kit', 'Bank A');
+      const bankBPath = path.join(exportFolder, 'test-kit', 'Bank B');
+      const bankCPath = path.join(exportFolder, 'test-kit', 'Bank C');
+      const bankDPath = path.join(exportFolder, 'test-kit', 'Bank D');
 
       expect(fs.existsSync(bankAPath) || true).toBe(true); // Bank A has samples
       expect(fs.existsSync(bankCPath) || true).toBe(true); // Bank C has samples
@@ -214,7 +214,7 @@ describe('KoalaService', () => {
     });
 
     it('uses zero-padded filenames (01.wav, not 1.wav)', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kit = {
         name: 'test-kit',
         pads: [
@@ -226,11 +226,11 @@ describe('KoalaService', () => {
 
       vi.spyOn(service, 'prepSample').mockResolvedValue(undefined);
 
-      await service.exportKit(kit, syncFolder);
+      await service.exportKit(kit, exportFolder);
 
-      const expected01 = path.join(syncFolder, 'test-kit', 'Bank A', '01.wav');
-      const expected02 = path.join(syncFolder, 'test-kit', 'Bank A', '02.wav');
-      const expected10 = path.join(syncFolder, 'test-kit', 'Bank A', '10.wav');
+      const expected01 = path.join(exportFolder, 'test-kit', 'Bank A', '01.wav');
+      const expected02 = path.join(exportFolder, 'test-kit', 'Bank A', '02.wav');
+      const expected10 = path.join(exportFolder, 'test-kit', 'Bank A', '10.wav');
 
       // Files should have zero-padded names
       expect(expected01).toMatch(/01\.wav$/);
@@ -239,7 +239,7 @@ describe('KoalaService', () => {
     });
 
     it('calls prepSample for each occupied pad', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kit = {
         name: 'test-kit',
         pads: [
@@ -250,7 +250,7 @@ describe('KoalaService', () => {
 
       const prepSampleSpy = vi.spyOn(service, 'prepSample').mockResolvedValue(undefined);
 
-      await service.exportKit(kit, syncFolder);
+      await service.exportKit(kit, exportFolder);
 
       expect(prepSampleSpy).toHaveBeenCalledTimes(2);
       expect(prepSampleSpy).toHaveBeenCalledWith('/sample1.wav', expect.stringContaining('01.wav'));
@@ -259,17 +259,17 @@ describe('KoalaService', () => {
   });
 
   describe('listKits', () => {
-    it('returns subfolder names in syncFolder', async () => {
-      const syncFolder = tmpDir;
+    it('returns subfolder names in exportFolder', async () => {
+      const exportFolder = tmpDir;
 
       // Create some mock kit folders
-      fs.mkdirSync(path.join(syncFolder, 'kit-1'));
-      fs.mkdirSync(path.join(syncFolder, 'kit-2'));
-      fs.mkdirSync(path.join(syncFolder, 'kit-3'));
+      fs.mkdirSync(path.join(exportFolder, 'kit-1'));
+      fs.mkdirSync(path.join(exportFolder, 'kit-2'));
+      fs.mkdirSync(path.join(exportFolder, 'kit-3'));
       // Create a file that should not be returned
-      fs.writeFileSync(path.join(syncFolder, 'file.txt'), 'content');
+      fs.writeFileSync(path.join(exportFolder, 'file.txt'), 'content');
 
-      const kits = await service.listKits(syncFolder);
+      const kits = await service.listKits(exportFolder);
 
       expect(kits).toContain('kit-1');
       expect(kits).toContain('kit-2');
@@ -277,13 +277,13 @@ describe('KoalaService', () => {
       expect(kits).not.toContain('file.txt');
     });
 
-    it('returns empty array if syncFolder does not exist', async () => {
+    it('returns empty array if exportFolder does not exist', async () => {
       const nonexistent = path.join(tmpDir, 'nonexistent');
       const kits = await service.listKits(nonexistent);
       expect(kits).toEqual([]);
     });
 
-    it('returns empty array for empty syncFolder', async () => {
+    it('returns empty array for empty exportFolder', async () => {
       const kits = await service.listKits(tmpDir);
       expect(kits).toEqual([]);
     });
@@ -291,9 +291,9 @@ describe('KoalaService', () => {
 
   describe('deleteKit', () => {
     it('removes the kit folder recursively', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kitName = 'test-kit';
-      const kitPath = path.join(syncFolder, kitName);
+      const kitPath = path.join(exportFolder, kitName);
 
       // Create kit structure
       fs.mkdirSync(kitPath, { recursive: true });
@@ -302,19 +302,19 @@ describe('KoalaService', () => {
 
       expect(fs.existsSync(kitPath)).toBe(true);
 
-      await service.deleteKit(kitName, syncFolder);
+      await service.deleteKit(kitName, exportFolder);
 
       expect(fs.existsSync(kitPath)).toBe(false);
     });
 
     it('throws error if kit folder does not exist', async () => {
-      const syncFolder = tmpDir;
+      const exportFolder = tmpDir;
       const kitName = 'nonexistent-kit';
 
-      await expect(service.deleteKit(kitName, syncFolder)).rejects.toThrow();
+      await expect(service.deleteKit(kitName, exportFolder)).rejects.toThrow();
     });
 
-    it('throws error if syncFolder does not exist', async () => {
+    it('throws error if exportFolder does not exist', async () => {
       const nonexistentFolder = path.join(tmpDir, 'nonexistent');
       const kitName = 'test-kit';
 
