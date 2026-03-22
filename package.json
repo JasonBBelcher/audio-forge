@@ -21,10 +21,12 @@
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "@tonejs/midi": "^2.0.28",
     "@types/archiver": "^7.0.0",
     "archiver": "^7.0.1",
     "better-sqlite3": "^12.0.0",
     "electron-updater": "^6.3.0",
+    "midi-writer-js": "^3.2.1",
     "wavesurfer.js": "^7.12.4"
   },
   "devDependencies": {

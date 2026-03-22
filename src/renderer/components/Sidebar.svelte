@@ -21,6 +21,7 @@
       label: 'LIBRARY',
       items: [
         { id: 'library', label: 'Library', icon: '🗂' },
+        { id: 'midi', label: 'MIDI Library', icon: '🎵' },
         { id: 'import', label: 'Import', icon: '⬇' },
       ],
     },
@@ -35,6 +36,7 @@
       items: [
         { id: 'koala', label: 'Koala Kit', icon: '🐨' },
         { id: 'sp404', label: 'SP-404 MK2', icon: '🎛' },
+        { id: 'emx1', label: 'EMX-1 Electribe', icon: '🎹' },
       ],
     },
     {

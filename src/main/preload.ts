@@ -117,6 +117,28 @@ const api = {
     detectSDCards: () =>
       ipcRenderer.invoke('sp404:detectSDCards'),
   },
+  emx1: {
+    listPorts: () =>
+      ipcRenderer.invoke('emx1:listPorts'),
+    connect: (inputPort: string | number, outputPort: string | number) =>
+      ipcRenderer.invoke('emx1:connect', inputPort, outputPort),
+    disconnect: () =>
+      ipcRenderer.invoke('emx1:disconnect'),
+    requestDump: () =>
+      ipcRenderer.invoke('emx1:requestDump'),
+    parseDump: (sysexBytes: number[]) =>
+      ipcRenderer.invoke('emx1:parseDump', sysexBytes),
+    selectPattern: (patternNumber: number) =>
+      ipcRenderer.invoke('emx1:selectPattern', patternNumber),
+    exportMidi: (pattern: object, outputPath: string) =>
+      ipcRenderer.invoke('emx1:exportMidi', pattern, outputPath),
+    sendStart: () =>
+      ipcRenderer.invoke('emx1:sendStart'),
+    sendStop: () =>
+      ipcRenderer.invoke('emx1:sendStop'),
+    isConnected: () =>
+      ipcRenderer.invoke('emx1:isConnected'),
+  },
   collections: {
     list: () =>
       ipcRenderer.invoke('collections:list'),
@@ -140,7 +162,26 @@ const api = {
     unwatchFolder: (path: string) => ipcRenderer.invoke('watcher:unwatchFolder', path),
     getWatchedFolders: () => ipcRenderer.invoke('watcher:getWatchedFolders'),
   },
-  midi: {},
+  midi: {
+    import: (filePaths: string[]) =>
+      ipcRenderer.invoke('midi:import', filePaths),
+    list: () =>
+      ipcRenderer.invoke('midi:list'),
+    delete: (id: number) =>
+      ipcRenderer.invoke('midi:delete', id),
+    linkToAsset: (midiId: number, assetId: number) =>
+      ipcRenderer.invoke('midi:linkToAsset', midiId, assetId),
+    unlinkFromAsset: (midiId: number, assetId: number) =>
+      ipcRenderer.invoke('midi:unlinkFromAsset', midiId, assetId),
+    getForAsset: (assetId: number) =>
+      ipcRenderer.invoke('midi:getForAsset', assetId),
+    getAssetsForMidi: (midiId: number) =>
+      ipcRenderer.invoke('midi:getAssetsForMidi', midiId),
+    updateTags: (midiId: number, tags: string[]) =>
+      ipcRenderer.invoke('midi:updateTags', midiId, tags),
+    showImportDialog: () =>
+      ipcRenderer.invoke('midi:showImportDialog'),
+  },
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);
     ipcRenderer.on(channel, handler);

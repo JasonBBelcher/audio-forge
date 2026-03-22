@@ -36,10 +36,14 @@ import { registerKoalaHandlers } from './ipc/koalaHandlers.js';
 import { registerFileHandlers } from './ipc/fileHandlers.js';
 import { SP404Service } from './services/sp404.service.js';
 import { registerSP404Handlers } from './ipc/sp404Handlers.js';
+import { EMX1Service } from './services/emx1.service.js';
+import { registerEMX1Handlers } from './ipc/emx1Handlers.js';
 import { CollectionService } from './services/collection.service.js';
 import { registerCollectionHandlers } from './ipc/collectionHandlers.js';
 import { FolderWatcherService } from './services/folder-watcher.service.js';
 import { registerWatcherHandlers } from './ipc/watcherHandlers.js';
+import { MidiFilesService } from './services/midi-files.service.js';
+import { registerMidiHandlers } from './ipc/midiHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -61,7 +65,9 @@ const mediaSyncService = new MediaSyncService();
 const adapterRegistry = new AdapterRegistry();
 const koalaService = new KoalaService();
 const sp404Service = new SP404Service();
+const emx1Service = new EMX1Service();
 const collectionService = new CollectionService(db);
+const midiFilesService = new MidiFilesService(db);
 const analysisPipelineService = new AnalysisPipelineService(audioService, fileService);
 const folderWatcherService = new FolderWatcherService(fileService, analysisPipelineService);
 
@@ -79,9 +85,10 @@ registerMediaSyncHandlers(ipcMain, mediaSyncService);
 registerHardwareHandlers(ipcMain, adapterRegistry);
 registerKoalaHandlers(ipcMain, koalaService);
 registerSP404Handlers(ipcMain, sp404Service);
+registerEMX1Handlers(ipcMain, emx1Service);
 registerCollectionHandlers(ipcMain, collectionService);
 registerFileHandlers(ipcMain, fileService, analysisPipelineService, queueService);
-// Note: registerWatcherHandlers is called in createWindow() after mainWindow is set
+// Note: registerWatcherHandlers and registerMidiHandlers are called in createWindow() after mainWindow is set
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -105,8 +112,9 @@ function createWindow(): void {
     },
   });
 
-  // Register watcher handlers now that mainWindow exists
+  // Register watcher and MIDI handlers now that mainWindow exists
   registerWatcherHandlers(ipcMain, folderWatcherService, mainWindow);
+  registerMidiHandlers(ipcMain, midiFilesService, mainWindow);
 
   // Auto-start watching the Koala sync folder if it's configured
   const koalaSyncFolder = settingsService.get('koalaSyncFolder') as string | undefined;

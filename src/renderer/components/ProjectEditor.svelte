@@ -23,8 +23,10 @@
   import LibraryView from './LibraryView.svelte';
   import ImportView from './ImportView.svelte';
   import CollectionsView from './CollectionsView.svelte';
+  import MidiLibraryView from './MidiLibraryView.svelte';
   import KoalaKitBuilder from './KoalaKitBuilder.svelte';
   import SP404KitBuilder from './SP404KitBuilder.svelte';
+  import EMX1View from './EMX1View.svelte';
   import HealthPanel from './HealthPanel.svelte';
   import JobsPanel from './JobsPanel.svelte';
   import WaveEditor from './WaveEditor.svelte';
@@ -434,6 +436,8 @@
             <!-- View title -->
             {#if activeView === 'library'}
               <h2>Library</h2>
+            {:else if activeView === 'midi'}
+              <h2>MIDI Library</h2>
             {:else if activeView === 'import'}
               <h2>Import</h2>
             {:else if activeView === 'collections'}
@@ -442,6 +446,8 @@
               <h2>Koala Kit</h2>
             {:else if activeView === 'sp404'}
               <h2>SP-404 MK2</h2>
+            {:else if activeView === 'emx1'}
+              <h2>EMX-1 Electribe</h2>
             {:else if activeView === 'settings'}
               <h2>Settings</h2>
             {:else if activeView === 'wave-editor'}
@@ -462,6 +468,8 @@
         <div class="view-content">
           {#if activeView === 'library'}
             <LibraryView on:edit={handleLibraryEdit} on:preview={handleLibraryPreview} />
+          {:else if activeView === 'midi'}
+            <MidiLibraryView />
           {:else if activeView === 'import'}
             <ImportView />
           {:else if activeView === 'collections'}
@@ -470,6 +478,8 @@
             <KoalaKitBuilder />
           {:else if activeView === 'sp404'}
             <SP404KitBuilder />
+          {:else if activeView === 'emx1'}
+            <EMX1View />
           {:else if activeView === 'settings'}
             <div class="settings-view">
               <HealthPanel />
