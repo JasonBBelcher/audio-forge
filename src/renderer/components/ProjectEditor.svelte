@@ -28,6 +28,7 @@
   import HealthPanel from './HealthPanel.svelte';
   import JobsPanel from './JobsPanel.svelte';
   import WaveEditor from './WaveEditor.svelte';
+  import AudioPreview from './AudioPreview.svelte';
   import { onMount, onDestroy } from 'svelte';
 
   let project: Project | null = null;
@@ -43,6 +44,8 @@
   let activeView = 'library';
   let selectedFilePath: string | null = null;
   let selectedFileName: string | null = null;
+  let previewFilePath: string = '';
+  let previewFileName: string = '';
   let tracks: any[] = [
     { id: '1', name: 'Track 1', volume: 0.8, muted: false, solo: false, hasAudio: false },
     { id: '2', name: 'Track 2', volume: 0.7, muted: false, solo: false, hasAudio: false },
@@ -312,6 +315,12 @@
     activeView = 'wave-editor';
   }
 
+  function handleLibraryPreview(e: CustomEvent<{ filePath: string; fileName: string }>) {
+    const { filePath, fileName } = e.detail;
+    previewFilePath = filePath;
+    previewFileName = fileName;
+  }
+
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />
@@ -452,7 +461,7 @@
         <!-- View Content -->
         <div class="view-content">
           {#if activeView === 'library'}
-            <LibraryView on:edit={handleLibraryEdit} />
+            <LibraryView on:edit={handleLibraryEdit} on:preview={handleLibraryPreview} />
           {:else if activeView === 'import'}
             <ImportView />
           {:else if activeView === 'collections'}
@@ -475,6 +484,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Audio Preview Bar -->
+    <AudioPreview filePath={previewFilePath} fileName={previewFileName} />
   </div>
 </div>
 {/if}

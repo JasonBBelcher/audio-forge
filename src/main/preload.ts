@@ -135,6 +135,11 @@ const api = {
     exportZip: (collectionId: number, outputPath: string) =>
       ipcRenderer.invoke('collections:exportZip', collectionId, outputPath),
   },
+  watcher: {
+    watchFolder: (path: string) => ipcRenderer.invoke('watcher:watchFolder', path),
+    unwatchFolder: (path: string) => ipcRenderer.invoke('watcher:unwatchFolder', path),
+    getWatchedFolders: () => ipcRenderer.invoke('watcher:getWatchedFolders'),
+  },
   midi: {},
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);

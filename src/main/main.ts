@@ -38,6 +38,8 @@ import { SP404Service } from './services/sp404.service.js';
 import { registerSP404Handlers } from './ipc/sp404Handlers.js';
 import { CollectionService } from './services/collection.service.js';
 import { registerCollectionHandlers } from './ipc/collectionHandlers.js';
+import { FolderWatcherService } from './services/folder-watcher.service.js';
+import { registerWatcherHandlers } from './ipc/watcherHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -61,6 +63,7 @@ const koalaService = new KoalaService();
 const sp404Service = new SP404Service();
 const collectionService = new CollectionService(db);
 const analysisPipelineService = new AnalysisPipelineService(audioService, fileService);
+const folderWatcherService = new FolderWatcherService(fileService, analysisPipelineService);
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -78,6 +81,7 @@ registerKoalaHandlers(ipcMain, koalaService);
 registerSP404Handlers(ipcMain, sp404Service);
 registerCollectionHandlers(ipcMain, collectionService);
 registerFileHandlers(ipcMain, fileService, analysisPipelineService, queueService);
+// Note: registerWatcherHandlers is called in createWindow() after mainWindow is set
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -100,6 +104,19 @@ function createWindow(): void {
       sandbox: false, // needed for IPC invoke in preload
     },
   });
+
+  // Register watcher handlers now that mainWindow exists
+  registerWatcherHandlers(ipcMain, folderWatcherService, mainWindow);
+
+  // Auto-start watching the Koala sync folder if it's configured
+  const koalaSyncFolder = settingsService.get('koalaSyncFolder') as string | undefined;
+  if (koalaSyncFolder) {
+    try {
+      folderWatcherService.watchFolder(koalaSyncFolder);
+    } catch (error) {
+      console.error(`Failed to start watching Koala sync folder: ${koalaSyncFolder}`, error);
+    }
+  }
 
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
@@ -243,4 +260,9 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (mainWindow === null) createWindow();
+});
+
+// Clean up watchers on app quit
+app.on('before-quit', () => {
+  folderWatcherService.unwatchAll();
 });

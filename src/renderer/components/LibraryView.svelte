@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import WaveformSparkline from './WaveformSparkline.svelte';
+  import StemSeparationModal from './StemSeparationModal.svelte';
 
   interface Asset {
     id: number;
@@ -15,7 +16,10 @@
     created_at?: string;
   }
 
-  const dispatch = createEventDispatcher<{ edit: { asset: Asset } }>();
+  const dispatch = createEventDispatcher<{
+    edit: { asset: Asset };
+    preview: { filePath: string; fileName: string };
+  }>();
 
   let assets: Asset[] = [];
   let filteredAssets: Asset[] = [];
@@ -40,6 +44,16 @@
 
   // Waveform peaks cache
   let peaksCache = new Map<number, number[]>();
+
+  // Analyze All state
+  let analyzingAll = false;
+  let analyzeProgress = 0;
+  let analyzeJobId: string | null = null;
+  let unsubscribers: Array<() => void> = [];
+
+  // Stem Separation state
+  let stemSeparationAsset: Asset | null = null;
+  let showStemModal = false;
 
   function downsample(peaks: number[], target: number): number[] {
     if (peaks.length <= target) return peaks;
@@ -97,6 +111,25 @@
       // Load waveform peaks in batches
       if (assets.length > 0) {
         await loadPeaks(assets);
+      }
+
+      // Subscribe to library:fileAdded event to auto-refresh when new files are imported
+      if (af?.on) {
+        const unsub = af.on('library:fileAdded', async () => {
+          try {
+            assets = await af.files.list();
+            uniqueTypes = [...new Set(assets.map(a => a.file_type))].sort();
+            filterTypes = new Set(uniqueTypes);
+            uniqueKeys = [...new Set(assets.filter(a => a.key).map(a => a.key!))].sort();
+            applyFiltersAndSearch();
+            if (assets.length > 0) {
+              await loadPeaks(assets);
+            }
+          } catch (e) {
+            console.error('Failed to refresh assets on file added:', e);
+          }
+        });
+        unsubscribers.push(unsub);
       }
     } catch (e: any) {
       error = e?.message || 'Failed to load assets';
@@ -250,6 +283,11 @@
     dispatch('edit', { asset });
   }
 
+  function handlePlayClick(e: MouseEvent, asset: Asset): void {
+    e.stopPropagation();
+    dispatch('preview', { filePath: asset.file_path, fileName: asset.name });
+  }
+
   function handleRowContextMenu(e: MouseEvent, asset: Asset): void {
     e.preventDefault();
     contextMenu = {
@@ -328,6 +366,114 @@
     handleRowClick(contextMenu.asset);
     closeContextMenu();
   }
+
+  function handleSeparateStems(): void {
+    if (!contextMenu) return;
+
+    stemSeparationAsset = contextMenu.asset;
+    showStemModal = true;
+    closeContextMenu();
+  }
+
+  async function handleStemsImported(event: CustomEvent<{ stems: Asset[] }>): Promise<void> {
+    // Reload assets to show newly imported stems
+    try {
+      const af = (window as any).audioforge;
+      assets = await af.files.list();
+      applyFiltersAndSearch();
+      await loadPeaks(assets);
+    } catch (e) {
+      console.error('Failed to reload assets after stem import:', e);
+    }
+
+    showStemModal = false;
+    stemSeparationAsset = null;
+  }
+
+  // Calculate unanalyzed count
+  $: unanalyzedCount = assets.filter(a => !a.bpm && !a.key && !a.duration).length;
+
+  async function handleAnalyzeAll(): Promise<void> {
+    if (analyzingAll) return;
+
+    try {
+      analyzingAll = true;
+      analyzeProgress = 0;
+
+      const af = (window as any).audioforge;
+      const result = await af.files?.analyzeAll?.();
+
+      if (!result?.jobId) {
+        throw new Error('Failed to start analysis job');
+      }
+
+      analyzeJobId = result.jobId;
+
+      // Subscribe to progress updates
+      if (af?.on) {
+        const unsubProgress = af.on('job:progress', (data: any) => {
+          if (data.jobId === analyzeJobId && data.progress !== undefined) {
+            analyzeProgress = data.progress;
+          }
+        });
+
+        const unsubComplete = af.on('job:complete', (data: any) => {
+          if (data.jobId === analyzeJobId) {
+            handleAnalyzeAllComplete();
+          }
+        });
+
+        const unsubFailed = af.on('job:failed', (data: any) => {
+          if (data.jobId === analyzeJobId) {
+            handleAnalyzeAllFailed();
+          }
+        });
+
+        unsubscribers.push(unsubProgress, unsubComplete, unsubFailed);
+      }
+    } catch (e) {
+      console.error('Failed to start analyze all:', e);
+      analyzingAll = false;
+      analyzeJobId = null;
+    }
+  }
+
+  async function handleAnalyzeAllComplete(): Promise<void> {
+    // Refresh asset list to show newly populated metadata
+    try {
+      const af = (window as any).audioforge;
+      assets = await af.files.list();
+      applyFiltersAndSearch();
+
+      // Reload peaks for assets that now have them
+      if (assets.length > 0) {
+        await loadPeaks(assets);
+      }
+    } catch (e) {
+      console.error('Failed to refresh assets after analysis:', e);
+    } finally {
+      analyzingAll = false;
+      analyzeProgress = 0;
+      analyzeJobId = null;
+      // Clean up subscriptions
+      unsubscribers.forEach(unsub => unsub());
+      unsubscribers = [];
+    }
+  }
+
+  function handleAnalyzeAllFailed(): void {
+    analyzingAll = false;
+    analyzeProgress = 0;
+    analyzeJobId = null;
+    // Clean up subscriptions
+    unsubscribers.forEach(unsub => unsub());
+    unsubscribers = [];
+  }
+
+  onDestroy(() => {
+    // Clean up any remaining subscriptions
+    unsubscribers.forEach(unsub => unsub());
+  });
 </script>
 
 <svelte:window onclick={closeContextMenu} />
@@ -347,7 +493,16 @@
 
     <div class="toolbar-buttons">
       <button class="import-btn">Import</button>
-      <button class="analyze-btn">Analyze All</button>
+      <button class="analyze-btn" disabled={analyzingAll} onclick={handleAnalyzeAll}>
+        {#if analyzingAll}
+          <span class="analyzing-spinner"></span>
+          Analyzing... {analyzeProgress}%
+        {:else if unanalyzedCount > 0}
+          Analyze All ({unanalyzedCount})
+        {:else}
+          Analyze All ✓
+        {/if}
+      </button>
     </div>
   </div>
 
@@ -447,9 +602,9 @@
           <tbody>
             {#each filteredAssets as asset (asset.id)}
               <tr oncontextmenu={(e) => handleRowContextMenu(e, asset)}>
-                <td class="col-name" onclick={() => handleRowClick(asset)}>
-                  <span class="play-btn">></span>
-                  <span class="asset-name">{asset.name}</span>
+                <td class="col-name">
+                  <span class="play-btn" onclick={(e) => handlePlayClick(e, asset)}>▶</span>
+                  <span class="asset-name" onclick={() => handleRowClick(asset)}>{asset.name}</span>
                 </td>
                 <td class="col-waveform">
                   <WaveformSparkline peaks={peaksCache.get(asset.id) ?? []} width={80} height={24} />
@@ -475,10 +630,19 @@
       <button role="menuitem" onclick={dispatchEditEvent}>Edit in Wave Editor</button>
       <button role="menuitem" onclick={handleAnalyzeBpmKey}>Analyze BPM+Key</button>
       <button role="menuitem" onclick={handleRevealInFinder}>Reveal in Finder</button>
+      <button role="menuitem" onclick={handleSeparateStems}>Separate Stems</button>
       <hr />
       <button role="menuitem" class="delete-option" onclick={handleDelete}>Delete</button>
     </div>
   {/if}
+
+  <!-- Stem Separation Modal -->
+  <StemSeparationModal
+    asset={stemSeparationAsset}
+    open={showStemModal}
+    on:close={() => { showStemModal = false; stemSeparationAsset = null; }}
+    on:stemsImported={handleStemsImported}
+  />
 </div>
 
 <style>
@@ -552,6 +716,29 @@
   .analyze-btn:hover {
     background: rgba(100, 181, 246, 0.3);
     border-color: rgba(100, 181, 246, 0.6);
+  }
+
+  .import-btn:disabled,
+  .analyze-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .analyzing-spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid rgba(100, 181, 246, 0.3);
+    border-top-color: #64b5f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 4px;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .main-content {

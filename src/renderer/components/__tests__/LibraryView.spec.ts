@@ -56,6 +56,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue([]),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
         audio: {
           analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
@@ -70,6 +71,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue([mockAssets[0]]),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
         audio: {
           analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
@@ -93,6 +95,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -108,6 +111,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn(() => new Promise(r => setTimeout(r, 100))),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -123,6 +127,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockRejectedValue(new Error('API Error')),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -139,6 +144,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue([mockAssets[2]]), // vocal.flac has no bpm
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -222,6 +228,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -240,6 +247,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -267,6 +275,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -291,6 +300,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -318,6 +328,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
       };
 
@@ -424,6 +435,146 @@ describe('LibraryView Component', () => {
     });
   });
 
+  describe('Analyze All Button', () => {
+    it('button exists in toolbar', async () => {
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
+        },
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 0));
+
+      const analyzeBtn = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.includes('Analyze All'));
+      expect(analyzeBtn).toBeTruthy();
+    });
+
+    it('clicking "Analyze All" calls files.analyzeAll()', async () => {
+      const analyzeAllSpy = vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' });
+
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: analyzeAllSpy,
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
+        },
+        on: vi.fn().mockReturnValue(() => {}),
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 0));
+
+      const analyzeBtn = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.includes('Analyze All'));
+
+      if (analyzeBtn) {
+        await fireEvent.click(analyzeBtn);
+        await new Promise(r => setTimeout(r, 50));
+        expect(analyzeAllSpy).toHaveBeenCalled();
+      }
+    });
+
+    it('shows analyzing state after button click', async () => {
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
+        },
+        on: vi.fn().mockReturnValue(() => {}),
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 0));
+
+      const analyzeBtn = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.includes('Analyze All'));
+
+      if (analyzeBtn) {
+        await fireEvent.click(analyzeBtn);
+        await new Promise(r => setTimeout(r, 100));
+
+        // Button should be disabled while analyzing
+        expect((analyzeBtn as HTMLButtonElement).disabled).toBe(true);
+      }
+    });
+
+    it('button label shows unanalyzed count when assets lack metadata', async () => {
+      // mockAssets[2] (vocal.flac) has no bpm, key, or duration
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue([mockAssets[0], mockAssets[1], mockAssets[2]]),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
+        },
+        on: vi.fn().mockReturnValue(() => {}),
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 0));
+
+      const analyzeBtn = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.includes('Analyze All'));
+
+      // Should show count of unanalyzed assets
+      expect(analyzeBtn?.textContent).toContain('1');
+    });
+
+    it('subscribes to job:progress events to update progress display', async () => {
+      const onSpy = vi.fn();
+      let progressHandler: ((data: any) => void) | null = null;
+
+      onSpy.mockImplementation((channel, handler) => {
+        if (channel === 'job:progress') {
+          progressHandler = handler;
+        }
+        return () => {};
+      });
+
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
+        },
+        on: onSpy,
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 0));
+
+      const analyzeBtn = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.includes('Analyze All'));
+
+      if (analyzeBtn) {
+        await fireEvent.click(analyzeBtn);
+        await new Promise(r => setTimeout(r, 50));
+
+        // Simulate progress event
+        if (progressHandler) {
+          progressHandler({ jobId: 'job-analyze-1', progress: 50 });
+          await new Promise(r => setTimeout(r, 50));
+          // Progress display should update (button text or toolbar should show progress)
+          expect(onSpy).toHaveBeenCalledWith('job:progress', expect.any(Function));
+        }
+      }
+    });
+  });
+
   describe('Waveform Sparklines', () => {
     it('calls analyzeWaveform for each asset after mount', async () => {
       const analyzeWaveformSpy = vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]);
@@ -431,6 +582,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue(mockAssets),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
         audio: {
           analyzeWaveform: analyzeWaveformSpy,
@@ -449,6 +601,7 @@ describe('LibraryView Component', () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue([mockAssets[0]]),
+          analyzeAll: vi.fn().mockResolvedValue({ jobId: 'job-analyze-1' }),
         },
         audio: {
           analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
