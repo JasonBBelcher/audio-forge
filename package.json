@@ -21,6 +21,8 @@
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1",
     "better-sqlite3": "^12.0.0",
     "electron-updater": "^6.3.0",
     "wavesurfer.js": "^7.12.4"

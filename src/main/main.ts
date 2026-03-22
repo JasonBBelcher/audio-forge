@@ -34,6 +34,10 @@ import { registerHardwareHandlers } from './ipc/hardwareHandlers.js';
 import { registerMediaSyncHandlers } from './ipc/mediaSyncHandlers.js';
 import { registerKoalaHandlers } from './ipc/koalaHandlers.js';
 import { registerFileHandlers } from './ipc/fileHandlers.js';
+import { SP404Service } from './services/sp404.service.js';
+import { registerSP404Handlers } from './ipc/sp404Handlers.js';
+import { CollectionService } from './services/collection.service.js';
+import { registerCollectionHandlers } from './ipc/collectionHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -54,6 +58,8 @@ const platformService = new PlatformService(paths.database);
 const mediaSyncService = new MediaSyncService();
 const adapterRegistry = new AdapterRegistry();
 const koalaService = new KoalaService();
+const sp404Service = new SP404Service();
+const collectionService = new CollectionService(db);
 const analysisPipelineService = new AnalysisPipelineService(audioService, fileService);
 
 // Register service handlers
@@ -69,6 +75,8 @@ registerPlatformHandlers(ipcMain, platformService);
 registerMediaSyncHandlers(ipcMain, mediaSyncService);
 registerHardwareHandlers(ipcMain, adapterRegistry);
 registerKoalaHandlers(ipcMain, koalaService);
+registerSP404Handlers(ipcMain, sp404Service);
+registerCollectionHandlers(ipcMain, collectionService);
 registerFileHandlers(ipcMain, fileService, analysisPipelineService, queueService);
 
 function ensureDir(dir: string) {

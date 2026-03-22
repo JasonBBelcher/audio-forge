@@ -109,6 +109,32 @@ const api = {
     deleteKit: (kitName: string, syncFolder: string) =>
       ipcRenderer.invoke('koala:deleteKit', kitName, syncFolder),
   },
+  sp404: {
+    exportKit: (kit: object, sdCardPath: string) =>
+      ipcRenderer.invoke('sp404:exportKit', kit, sdCardPath),
+    listBanks: (sdCardPath: string) =>
+      ipcRenderer.invoke('sp404:listBanks', sdCardPath),
+    detectSDCards: () =>
+      ipcRenderer.invoke('sp404:detectSDCards'),
+  },
+  collections: {
+    list: () =>
+      ipcRenderer.invoke('collections:list'),
+    create: (name: string, description?: string) =>
+      ipcRenderer.invoke('collections:create', name, description),
+    delete: (id: number) =>
+      ipcRenderer.invoke('collections:delete', id),
+    rename: (id: number, name: string) =>
+      ipcRenderer.invoke('collections:rename', id, name),
+    addAsset: (collectionId: number, assetId: number) =>
+      ipcRenderer.invoke('collections:addAsset', collectionId, assetId),
+    removeAsset: (collectionId: number, assetId: number) =>
+      ipcRenderer.invoke('collections:removeAsset', collectionId, assetId),
+    listAssets: (collectionId: number) =>
+      ipcRenderer.invoke('collections:listAssets', collectionId),
+    exportZip: (collectionId: number, outputPath: string) =>
+      ipcRenderer.invoke('collections:exportZip', collectionId, outputPath),
+  },
   midi: {},
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);
