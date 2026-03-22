@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
+  import WaveformSparkline from './WaveformSparkline.svelte';
 
   interface Asset {
     id: number;
@@ -37,6 +38,40 @@
   let uniqueTypes: string[] = [];
   let uniqueKeys: string[] = [];
 
+  // Waveform peaks cache
+  let peaksCache = new Map<number, number[]>();
+
+  function downsample(peaks: number[], target: number): number[] {
+    if (peaks.length <= target) return peaks;
+    const step = peaks.length / target;
+    return Array.from({ length: target }, (_, i) => {
+      const slice = peaks.slice(Math.floor(i * step), Math.floor((i + 1) * step));
+      return slice.length ? Math.max(...slice.map(Math.abs)) : 0;
+    });
+  }
+
+  async function loadPeaks(assetsToLoad: Asset[]): Promise<void> {
+    for (let i = 0; i < assetsToLoad.length; i += 5) {
+      const batch = assetsToLoad.slice(i, i + 5);
+      await Promise.all(batch.map(async (asset) => {
+        if (peaksCache.has(asset.id)) return;
+        try {
+          const af = (window as any).audioforge;
+          const result = await af.audio?.analyzeWaveform(asset.file_path);
+          // analyzeWaveform may return { peaks: number[] } or number[] — handle both
+          const raw: number[] = Array.isArray(result) ? result : (result?.peaks ?? []);
+          // Downsample to 80 points max
+          peaksCache.set(asset.id, downsample(raw, 80));
+          peaksCache = new Map(peaksCache); // trigger Svelte reactivity
+        } catch (e) {
+          // On error, store empty array
+          peaksCache.set(asset.id, []);
+          peaksCache = new Map(peaksCache);
+        }
+      }));
+    }
+  }
+
   onMount(async () => {
     loading = true;
     error = null;
@@ -58,6 +93,11 @@
       uniqueKeys = [...new Set(assets.filter(a => a.key).map(a => a.key!))].sort();
 
       applyFiltersAndSearch();
+
+      // Load waveform peaks in batches
+      if (assets.length > 0) {
+        await loadPeaks(assets);
+      }
     } catch (e: any) {
       error = e?.message || 'Failed to load assets';
     } finally {
@@ -386,6 +426,7 @@
               <th class="col-name" role="columnheader" onclick={() => handleColumnClick('name')}>
                 Name {getSortArrow('name')}
               </th>
+              <th class="col-waveform">Waveform</th>
               <th class="col-bpm" role="columnheader" onclick={() => handleColumnClick('bpm')}>
                 BPM {getSortArrow('bpm')}
               </th>
@@ -409,6 +450,9 @@
                 <td class="col-name" onclick={() => handleRowClick(asset)}>
                   <span class="play-btn">></span>
                   <span class="asset-name">{asset.name}</span>
+                </td>
+                <td class="col-waveform">
+                  <WaveformSparkline peaks={peaksCache.get(asset.id) ?? []} width={80} height={24} />
                 </td>
                 <td class="col-bpm">{formatBpm(asset.bpm)}</td>
                 <td class="col-key">{formatKey(asset.key)}</td>
@@ -684,6 +728,14 @@
 
   .asset-name {
     word-break: break-all;
+  }
+
+  .col-waveform {
+    width: 100px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .col-bpm,

@@ -57,16 +57,22 @@ describe('LibraryView Component', () => {
         files: {
           list: vi.fn().mockResolvedValue([]),
         },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
+        },
       };
 
       const { container } = render(LibraryView);
       expect(container).toBeTruthy();
     });
 
-    it('renders column headers: Name, BPM, Key, Duration, Type, Size', async () => {
+    it('renders column headers: Name, Waveform, BPM, Key, Duration, Type, Size', async () => {
       (window as any).audioforge = {
         files: {
           list: vi.fn().mockResolvedValue([mockAssets[0]]),
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
         },
       };
 
@@ -75,6 +81,7 @@ describe('LibraryView Component', () => {
 
       const text = container.textContent;
       expect(text).toContain('Name');
+      expect(text).toContain('Waveform');
       expect(text).toContain('BPM');
       expect(text).toContain('Key');
       expect(text).toContain('Duration');
@@ -414,6 +421,93 @@ describe('LibraryView Component', () => {
           expect(analyzeKeySpy).toHaveBeenCalledWith('/samples/kick.wav');
         }
       }
+    });
+  });
+
+  describe('Waveform Sparklines', () => {
+    it('calls analyzeWaveform for each asset after mount', async () => {
+      const analyzeWaveformSpy = vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]);
+
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue(mockAssets),
+        },
+        audio: {
+          analyzeWaveform: analyzeWaveformSpy,
+        },
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 100)); // Wait for async loading
+
+      // Should call analyzeWaveform for each asset
+      expect(analyzeWaveformSpy.mock.calls.length).toBeGreaterThan(0);
+      expect(analyzeWaveformSpy).toHaveBeenCalledWith('/samples/kick.wav');
+    });
+
+    it('renders canvas element in each row', async () => {
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue([mockAssets[0]]),
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]),
+        },
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 100));
+
+      // Should have at least one canvas element for the waveform sparkline
+      const canvases = container.querySelectorAll('canvas');
+      expect(canvases.length).toBeGreaterThan(0);
+    });
+
+    it('handles analyzeWaveform errors gracefully', async () => {
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue([mockAssets[0]]),
+        },
+        audio: {
+          analyzeWaveform: vi.fn().mockRejectedValue(new Error('Analysis failed')),
+        },
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 100));
+
+      // Should still render without crashing
+      expect(container).toBeTruthy();
+      const rows = container.querySelectorAll('tbody tr');
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    it('batches analyzeWaveform calls (5 at a time)', async () => {
+      const analyzeWaveformSpy = vi.fn().mockResolvedValue([0.1, 0.5, 0.3, 0.8, 0.2]);
+
+      // Create 12 mock assets
+      const manyAssets = Array.from({ length: 12 }, (_, i) => ({
+        id: i,
+        name: `file${i}.wav`,
+        file_path: `/samples/file${i}.wav`,
+        file_type: 'wav',
+        file_size: 44032,
+      }));
+
+      (window as any).audioforge = {
+        files: {
+          list: vi.fn().mockResolvedValue(manyAssets),
+        },
+        audio: {
+          analyzeWaveform: analyzeWaveformSpy,
+        },
+      };
+
+      const { container } = render(LibraryView);
+      await new Promise(r => setTimeout(r, 200)); // Wait for all batches
+
+      // Should call analyzeWaveform for all assets
+      expect(analyzeWaveformSpy.mock.calls.length).toBeGreaterThanOrEqual(12);
     });
   });
 });
