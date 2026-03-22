@@ -34,6 +34,7 @@
       label: 'HARDWARE',
       items: [
         { id: 'koala', label: 'Koala Kit', icon: '🐨' },
+        { id: 'sp404', label: 'SP-404 MK2', icon: '🎛' },
       ],
     },
     {
