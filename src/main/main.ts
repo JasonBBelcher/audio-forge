@@ -278,6 +278,22 @@ function setupJobExecutor(window: BrowserWindow): void {
       });
       return result;
     }],
+    ['audio-to-midi', async (job: any, onProgress: Function) => {
+      const params = job.payload;
+      onProgress(10, 'starting conversion');
+      const result = await audioToMidiService.convert(params);
+      onProgress(90, 'importing MIDI');
+      // Import the generated MIDI file into the database
+      const midiInfo = midiFilesService.importMidi(result.midiPath);
+      onProgress(100, 'completed');
+      return { midiPath: result.midiPath, ...midiInfo };
+    }],
+    ['install-basic-pitch', async (job: any, onProgress: Function) => {
+      onProgress(10, 'installing basic_pitch');
+      await audioToMidiService.install();
+      onProgress(100, 'installation completed');
+      return { success: true };
+    }],
   ]);
 
   // Create executor with emit callback to send events to renderer
