@@ -23,6 +23,7 @@
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "@julusian/midi": "^3.6.1",
     "@tonejs/midi": "^2.0.28",
     "@types/archiver": "^7.0.0",
     "archiver": "^7.0.1",

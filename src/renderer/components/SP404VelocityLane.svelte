@@ -98,10 +98,7 @@
     on:mousemove={handleMouseMove}
     on:mouseup={handleMouseUp}
     on:mouseleave={handleMouseLeave}
-    role="slider"
-    aria-label="Velocity lane"
-    aria-valuemin={0}
-    aria-valuemax={127}
+    aria-label="Velocity lane — click and drag to set step velocities"
   ></canvas>
 </div>
 

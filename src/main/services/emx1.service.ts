@@ -2,16 +2,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-// Dynamic require allows vitest to mock the module
+// Dynamic require allows vitest to mock the module.
+// Tries 'midi' (node-midi legacy name) then '@julusian/midi' (maintained fork).
 function getMidiModule(): any {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const midi = require('midi');
-    return midi;
-  } catch (e) {
-    // Graceful fallback for test environments where midi might not be installed
-    return null;
+  for (const id of ['midi', '@julusian/midi']) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      return require(id);
+    } catch {
+      // continue
+    }
   }
+  // Graceful fallback for test environments where midi might not be installed
+  return null;
 }
 
 export interface EMX1Pattern {

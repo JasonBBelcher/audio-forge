@@ -143,8 +143,7 @@
     on:mousemove={handleMouseMove}
     on:mouseup={handleMouseUp}
     on:mouseleave={handleMouseUp}
-    role="img"
-    aria-label="Chop visualizer"
+    aria-label="Chop visualizer — double-click to add chop, drag dividers to move"
   ></canvas>
 </div>
 
