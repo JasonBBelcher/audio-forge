@@ -86,7 +86,7 @@ const audioToMidiService = new AudioToMidiService();
 const analysisPipelineService = new AnalysisPipelineService(audioService, fileService);
 const folderWatcherService = new FolderWatcherService(fileService, analysisPipelineService);
 const modelRegistry = new ModelRegistry();
-const stableAudioAdapter = new StableAudioAdapter();
+const stableAudioAdapter = new StableAudioAdapter(path.join(__dirname, '../../scripts'));
 modelRegistry.register(stableAudioAdapter);
 const generationService = new GenerationService(modelRegistry, fileService);
 const camelotService = new CamelotService();

@@ -11,8 +11,13 @@ export class StableAudioAdapter implements TextToAudioAdapter {
     { type: 'text-to-audio', description: 'Text-to-audio generation' },
   ];
 
-  private pythonVenv = join(homedir(), '.claude', 'venv', 'bin', 'python');
-  private scriptDir = join(__dirname, '../../scripts');
+  private pythonVenv = join(homedir(), '.audioforge-venv', 'bin', 'python');
+  private venvPip = join(homedir(), '.audioforge-venv', 'bin', 'pip');
+  private scriptDir: string;
+
+  constructor(scriptDir: string = join(process.cwd(), 'scripts')) {
+    this.scriptDir = scriptDir;
+  }
 
   async isInstalled(): Promise<boolean> {
     return new Promise((resolve) => {
@@ -28,7 +33,7 @@ export class StableAudioAdapter implements TextToAudioAdapter {
 
   async install(onProgress?: (pct: number, msg: string) => void): Promise<void> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(this.pythonVenv, ['install', 'stable_audio_tools', 'torchaudio'], {
+      const proc = spawn(this.venvPip, ['install', 'stable_audio_tools', 'torchaudio'], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -60,7 +65,7 @@ export class StableAudioAdapter implements TextToAudioAdapter {
 
   async uninstall(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(this.pythonVenv, ['uninstall', '-y', 'stable_audio_tools', 'torchaudio'], {
+      const proc = spawn(this.venvPip, ['uninstall', '-y', 'stable_audio_tools', 'torchaudio'], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 

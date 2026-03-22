@@ -32,6 +32,12 @@
       ],
     },
     {
+      label: 'GENERATE',
+      items: [
+        { id: 'ai-generate', label: 'AI Generate', icon: '✨' },
+      ],
+    },
+    {
       label: 'HARDWARE',
       items: [
         { id: 'koala', label: 'Koala Kit', icon: '🐨' },

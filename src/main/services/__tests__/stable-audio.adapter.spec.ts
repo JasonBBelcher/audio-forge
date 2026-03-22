@@ -17,7 +17,7 @@ describe('StableAudioAdapter', () => {
   let adapter: StableAudioAdapter;
 
   beforeEach(() => {
-    adapter = new StableAudioAdapter();
+    adapter = new StableAudioAdapter('/mock/scripts');
     vi.clearAllMocks();
   });
 

@@ -24,6 +24,7 @@
   import ImportView from './ImportView.svelte';
   import CollectionsView from './CollectionsView.svelte';
   import MidiLibraryView from './MidiLibraryView.svelte';
+  import AIGenerateView from './AIGenerateView.svelte';
   import KoalaKitBuilder from './KoalaKitBuilder.svelte';
   import SP404KitBuilder from './SP404KitBuilder.svelte';
   import SP404CompanionView from './SP404CompanionView.svelte';
@@ -489,6 +490,8 @@
             <ImportView />
           {:else if activeView === 'collections'}
             <CollectionsView />
+          {:else if activeView === 'ai-generate'}
+            <AIGenerateView />
           {:else if activeView === 'koala'}
             <KoalaKitBuilder />
           {:else if activeView === 'sp404'}

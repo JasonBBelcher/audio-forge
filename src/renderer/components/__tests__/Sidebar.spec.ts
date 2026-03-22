@@ -13,7 +13,7 @@ describe('Sidebar Component', () => {
     it('renders all navigation groups', () => {
       const { container } = render(Sidebar, { props: { activeView: 'library' } });
       const groups = container.querySelectorAll('.nav-group');
-      expect(groups.length).toBe(4);
+      expect(groups.length).toBe(5);
     });
 
     it('renders LIBRARY group', () => {
@@ -30,6 +30,14 @@ describe('Sidebar Component', () => {
         el => el.textContent?.includes('ORGANIZE')
       );
       expect(organizeGroup).toBeTruthy();
+    });
+
+    it('renders GENERATE group', () => {
+      const { container } = render(Sidebar, { props: { activeView: 'library' } });
+      const generateGroup = Array.from(container.querySelectorAll('.group-label')).find(
+        el => el.textContent?.includes('GENERATE')
+      );
+      expect(generateGroup).toBeTruthy();
     });
 
     it('renders HARDWARE group', () => {
@@ -67,6 +75,13 @@ describe('Sidebar Component', () => {
       const items = Array.from(container.querySelectorAll('.nav-item'));
       const collectionsItem = items.find(el => el.textContent?.includes('Collections'));
       expect(collectionsItem).toBeTruthy();
+    });
+
+    it('renders AI Generate nav item', () => {
+      const { container } = render(Sidebar, { props: { activeView: 'library' } });
+      const items = Array.from(container.querySelectorAll('.nav-item'));
+      const aiGenerateItem = items.find(el => el.textContent?.includes('AI Generate'));
+      expect(aiGenerateItem).toBeTruthy();
     });
 
     it('renders Koala Kit nav item', () => {
@@ -128,7 +143,7 @@ describe('Sidebar Component', () => {
     });
 
     it('can click each nav item', async () => {
-      const viewIds = ['library', 'import', 'collections', 'koala', 'settings'];
+      const viewIds = ['library', 'import', 'collections', 'ai-generate', 'koala', 'settings'];
 
       for (const viewId of viewIds) {
         const { container } = render(Sidebar, { props: { activeView: 'library' } });
@@ -141,7 +156,7 @@ describe('Sidebar Component', () => {
     });
 
     it('works with different initial active views', () => {
-      const viewIds = ['library', 'import', 'collections', 'koala', 'settings'];
+      const viewIds = ['library', 'import', 'collections', 'ai-generate', 'koala', 'settings'];
 
       viewIds.forEach(viewId => {
         const { container } = render(Sidebar, { props: { activeView: viewId } });
