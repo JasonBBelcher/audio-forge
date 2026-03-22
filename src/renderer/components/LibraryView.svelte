@@ -390,8 +390,8 @@
     stemSeparationAsset = null;
   }
 
-  // Calculate unanalyzed count
-  $: unanalyzedCount = assets.filter(a => !a.bpm && !a.key && !a.duration).length;
+  // Calculate unanalyzed count (missing BPM or Key)
+  $: unanalyzedCount = assets ? assets.filter(a => !a.bpm || !a.key).length : 0;
 
   async function handleAnalyzeAll(): Promise<void> {
     if (analyzingAll) return;
