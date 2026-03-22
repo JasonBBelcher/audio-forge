@@ -182,6 +182,24 @@ const api = {
     showImportDialog: () =>
       ipcRenderer.invoke('midi:showImportDialog'),
   },
+  generation: {
+    listModels: () =>
+      ipcRenderer.invoke('generation:listModels'),
+    isInstalled: (modelId: string) =>
+      ipcRenderer.invoke('generation:isInstalled', modelId),
+    install: (modelId: string) =>
+      ipcRenderer.invoke('generation:install', modelId),
+    generate: (params: { modelId: string; prompt: string; durationSec: number; seed?: number; steps?: number; guidance?: number; outputDir: string }) =>
+      ipcRenderer.invoke('generation:generate', params),
+  },
+  audioToMidi: {
+    convert: (params: object) =>
+      ipcRenderer.invoke('audioToMidi:convert', params),
+    isInstalled: () =>
+      ipcRenderer.invoke('audioToMidi:isInstalled'),
+    install: () =>
+      ipcRenderer.invoke('audioToMidi:install'),
+  },
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);
     ipcRenderer.on(channel, handler);

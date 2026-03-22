@@ -44,6 +44,12 @@ import { FolderWatcherService } from './services/folder-watcher.service.js';
 import { registerWatcherHandlers } from './ipc/watcherHandlers.js';
 import { MidiFilesService } from './services/midi-files.service.js';
 import { registerMidiHandlers } from './ipc/midiHandlers.js';
+import { AudioToMidiService } from './services/audio-to-midi.service.js';
+import { registerAudioToMidiHandlers } from './ipc/audioToMidiHandlers.js';
+import { ModelRegistry } from './services/model-adapter.js';
+import { StableAudioAdapter } from './services/adapters/stable-audio.adapter.js';
+import { GenerationService } from './services/generation.service.js';
+import { registerGenerationHandlers } from './ipc/generationHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -68,8 +74,13 @@ const sp404Service = new SP404Service();
 const emx1Service = new EMX1Service();
 const collectionService = new CollectionService(db);
 const midiFilesService = new MidiFilesService(db);
+const audioToMidiService = new AudioToMidiService();
 const analysisPipelineService = new AnalysisPipelineService(audioService, fileService);
 const folderWatcherService = new FolderWatcherService(fileService, analysisPipelineService);
+const modelRegistry = new ModelRegistry();
+const stableAudioAdapter = new StableAudioAdapter();
+modelRegistry.register(stableAudioAdapter);
+const generationService = new GenerationService(modelRegistry, fileService);
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -88,6 +99,8 @@ registerSP404Handlers(ipcMain, sp404Service);
 registerEMX1Handlers(ipcMain, emx1Service);
 registerCollectionHandlers(ipcMain, collectionService);
 registerFileHandlers(ipcMain, fileService, analysisPipelineService, queueService);
+registerGenerationHandlers(ipcMain, generationService, queueService);
+registerAudioToMidiHandlers(ipcMain, audioToMidiService, midiFilesService, queueService);
 // Note: registerWatcherHandlers and registerMidiHandlers are called in createWindow() after mainWindow is set
 
 function ensureDir(dir: string) {
@@ -242,6 +255,28 @@ function setupJobExecutor(window: BrowserWindow): void {
       const result = await mediaSyncService.syncAudioWithVideo(videoPath, audioPath, offsetSec, outputPath);
       onProgress(100, 'done');
       return result as any;
+    }],
+    ['install-model', async (job: any, onProgress: Function) => {
+      const { modelId } = job.payload;
+      await generationService.installModel(modelId, (pct, msg) => {
+        onProgress(pct, msg);
+      });
+      return { success: true };
+    }],
+    ['generate-audio', async (job: any, onProgress: Function) => {
+      const { modelId, prompt, durationSec, seed, steps, guidance, outputDir } = job.payload;
+      ensureDir(outputDir);
+      const result = await generationService.generate({
+        modelId,
+        prompt,
+        durationSec,
+        seed,
+        steps,
+        guidance,
+        outputDir,
+        onProgress,
+      });
+      return result;
     }],
   ]);
 
