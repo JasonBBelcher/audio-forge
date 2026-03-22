@@ -1,11 +1,64 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { settingsStore } from '../stores/settingsStore';
-  import { get } from 'svelte/store';
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
   $: settings = $settingsStore;
+
+  const af = (window as any).audioforge;
+
+  // ── Dependencies panel ────────────────────────────────────────────────────
+  interface ToolStatus { available: boolean; version?: string }
+  interface HealthStatus { tools: Record<string, ToolStatus> }
+
+  let healthStatus: HealthStatus | null = null;
+  let installing: Record<string, boolean> = {};
+  let installLog: Record<string, string[]> = {};
+  let installError: Record<string, string> = {};
+
+  const INSTALLABLE_TOOLS = ['ffmpeg', 'yt-dlp', 'sox', 'aubio', 'demucs'];
+
+  onMount(async () => {
+    await refreshHealth();
+  });
+
+  let removeProgressListener: (() => void) | null = null;
+
+  onMount(() => {
+    removeProgressListener = af.health.onInstallProgress((tool: string, line: string) => {
+      if (!installLog[tool]) installLog[tool] = [];
+      installLog[tool] = [...installLog[tool], line.trim()].slice(-20);
+      installLog = installLog;
+    });
+    return () => removeProgressListener?.();
+  });
+
+  onDestroy(() => {
+    removeProgressListener?.();
+  });
+
+  async function refreshHealth() {
+    try {
+      healthStatus = await af.health.getStatus();
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  async function installTool(tool: string) {
+    installing = { ...installing, [tool]: true };
+    installError = { ...installError, [tool]: '' };
+    installLog = { ...installLog, [tool]: [] };
+    try {
+      await af.health.installTool(tool);
+      await refreshHealth();
+    } catch (e) {
+      installError = { ...installError, [tool]: (e as Error).message };
+    } finally {
+      installing = { ...installing, [tool]: false };
+    }
+  }
 
   function handleBpmInput(e: Event) {
     const val = parseInt((e.target as HTMLInputElement).value, 10);
@@ -126,6 +179,45 @@
           on:change={handleAutoDetectKey}
         />
       </div>
+    </section>
+    <section class="settings-section">
+      <h3>Dependencies</h3>
+      <p class="dep-note">Optional CLI tools that power audio analysis and processing.</p>
+
+      {#if !healthStatus}
+        <p class="dep-loading">Checking tools…</p>
+      {:else}
+        <div class="dep-list">
+          {#each INSTALLABLE_TOOLS as tool}
+            {@const status = healthStatus.tools[tool]}
+            <div class="dep-row">
+              <span class="dep-indicator" class:ok={status?.available} class:missing={!status?.available}>
+                {status?.available ? '●' : '○'}
+              </span>
+              <span class="dep-name">{tool}</span>
+              {#if status?.available}
+                <span class="dep-version">{status.version ?? ''}</span>
+              {:else}
+                <button
+                  class="install-btn"
+                  disabled={installing[tool]}
+                  on:click={() => installTool(tool)}
+                >
+                  {installing[tool] ? 'Installing…' : 'Install'}
+                </button>
+              {/if}
+            </div>
+            {#if installError[tool]}
+              <p class="dep-error">{installError[tool]}</p>
+            {/if}
+            {#if installing[tool] && installLog[tool]?.length}
+              <pre class="dep-log">{installLog[tool].join('\n')}</pre>
+            {/if}
+          {/each}
+        </div>
+
+        <button class="refresh-btn" on:click={refreshHealth}>Refresh</button>
+      {/if}
     </section>
   </div>
 
@@ -248,6 +340,110 @@
 
   .reset-btn:hover {
     background: var(--bg-hover, #2d2d50);
+    color: var(--text-primary, #e0e0e0);
+  }
+
+  .dep-note {
+    margin: 0 0 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #888);
+  }
+
+  .dep-loading {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #888);
+  }
+
+  .dep-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .dep-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+  }
+
+  .dep-indicator {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #888);
+  }
+
+  .dep-indicator.ok {
+    color: #3fb950;
+  }
+
+  .dep-indicator.missing {
+    color: #f85149;
+  }
+
+  .dep-name {
+    flex: 1;
+    font-size: 0.88rem;
+    font-family: monospace;
+  }
+
+  .dep-version {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #888);
+    font-family: monospace;
+  }
+
+  .install-btn {
+    padding: 0.25rem 0.65rem;
+    font-size: 0.78rem;
+    background: rgba(56, 139, 253, 0.15);
+    border: 1px solid rgba(56, 139, 253, 0.4);
+    border-radius: 4px;
+    color: #58a6ff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .install-btn:hover:not(:disabled) {
+    background: rgba(56, 139, 253, 0.25);
+  }
+
+  .install-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .dep-error {
+    margin: 0 0 0.4rem 1.6rem;
+    font-size: 0.78rem;
+    color: #f85149;
+  }
+
+  .dep-log {
+    margin: 0 0 0.4rem 1.6rem;
+    font-size: 0.72rem;
+    color: var(--text-secondary, #888);
+    background: var(--bg-tertiary, #252540);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    max-height: 120px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .refresh-btn {
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.78rem;
+    background: transparent;
+    border: 1px solid var(--border, #333);
+    border-radius: 4px;
+    color: var(--text-secondary, #888);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .refresh-btn:hover {
     color: var(--text-primary, #e0e0e0);
   }
 </style>

@@ -94,6 +94,12 @@ const api = {
   },
   health: {
     getStatus: () => ipcRenderer.invoke('health:getStatus'),
+    installTool: (tool: string) => ipcRenderer.invoke('health:installTool', tool),
+    onInstallProgress: (cb: (tool: string, line: string) => void) => {
+      const handler = (_: unknown, data: { tool: string; line: string }) => cb(data.tool, data.line);
+      ipcRenderer.on('health:installProgress', handler);
+      return () => ipcRenderer.removeListener('health:installProgress', handler);
+    },
   },
   hardware: {
     list: () => ipcRenderer.invoke('hardware:list'),

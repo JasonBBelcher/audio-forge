@@ -91,7 +91,7 @@ const loopDetectorService = new LoopDetectorService();
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
 registerSettingsHandlers(ipcMain, settingsService);
-registerHealthHandlers(ipcMain, healthService);
+registerHealthHandlers(ipcMain, healthService, () => mainWindow?.webContents);
 registerJobHandlers(ipcMain, queueService);
 registerAudioHandlers(ipcMain, audioService);
 registerVideoHandlers(ipcMain, videoService);
