@@ -26,6 +26,7 @@
   import MidiLibraryView from './MidiLibraryView.svelte';
   import KoalaKitBuilder from './KoalaKitBuilder.svelte';
   import SP404KitBuilder from './SP404KitBuilder.svelte';
+  import SP404CompanionView from './SP404CompanionView.svelte';
   import EMX1View from './EMX1View.svelte';
   import HealthPanel from './HealthPanel.svelte';
   import JobsPanel from './JobsPanel.svelte';
@@ -446,6 +447,8 @@
               <h2>Koala Kit</h2>
             {:else if activeView === 'sp404'}
               <h2>SP-404 MK2</h2>
+            {:else if activeView === 'sp404-companion'}
+              <h2>SP-404 Companion</h2>
             {:else if activeView === 'emx1'}
               <h2>EMX-1 Electribe</h2>
             {:else if activeView === 'settings'}
@@ -478,6 +481,8 @@
             <KoalaKitBuilder />
           {:else if activeView === 'sp404'}
             <SP404KitBuilder />
+          {:else if activeView === 'sp404-companion'}
+            <SP404CompanionView />
           {:else if activeView === 'emx1'}
             <EMX1View />
           {:else if activeView === 'settings'}

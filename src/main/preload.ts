@@ -122,6 +122,43 @@ const api = {
       ipcRenderer.invoke('sp404:listBanks', sdCardPath),
     detectSDCards: () =>
       ipcRenderer.invoke('sp404:detectSDCards'),
+    companion: {
+      getState: (padRef: string) => ipcRenderer.invoke('sp404:companion:getState', padRef),
+      setState: (padRef: string, state: object) => ipcRenderer.invoke('sp404:companion:setState', padRef, state),
+      getChops: (assetId: number) => ipcRenderer.invoke('sp404:companion:getChops', assetId),
+      setChops: (assetId: number, chops: object[]) => ipcRenderer.invoke('sp404:companion:setChops', assetId, chops),
+    },
+    waveform: {
+      load: (padRef: string, filePath: string) => ipcRenderer.invoke('sp404:waveform:load', padRef, filePath),
+      analyze: (filePath: string, durationSec: number) => ipcRenderer.invoke('sp404:waveform:analyze', filePath, durationSec),
+    },
+    chop: {
+      detect: (filePath: string, mode: string, options: object) => ipcRenderer.invoke('sp404:chop:detect', filePath, mode, options),
+      export: (assetId: number, sdCardPath: string) => ipcRenderer.invoke('sp404:chop:export', assetId, sdCardPath),
+    },
+    pattern: {
+      load: (patternRef: string) => ipcRenderer.invoke('sp404:pattern:load', patternRef),
+      save: (data: object) => ipcRenderer.invoke('sp404:pattern:save', data),
+      setStep: (patternRef: string, partIndex: number, stepIndex: number, values: object) =>
+        ipcRenderer.invoke('sp404:pattern:setStep', patternRef, partIndex, stepIndex, values),
+      setVelocity: (patternRef: string, partIndex: number, stepIndex: number, velocity: number) =>
+        ipcRenderer.invoke('sp404:pattern:setVelocity', patternRef, partIndex, stepIndex, velocity),
+    },
+    transport: {
+      play: () => ipcRenderer.invoke('sp404:transport:play'),
+      stop: () => ipcRenderer.invoke('sp404:transport:stop'),
+      setBpm: (bpm: number) => ipcRenderer.invoke('sp404:transport:setBpm', bpm),
+      onState: (cb: (state: object) => void) => {
+        const handler = (_: unknown, state: object) => cb(state);
+        ipcRenderer.on('sp404:transport:state', handler);
+        return () => ipcRenderer.removeListener('sp404:transport:state', handler);
+      },
+      onPlayhead: (cb: (pos: object) => void) => {
+        const handler = (_: unknown, pos: object) => cb(pos);
+        ipcRenderer.on('sp404:pattern:playhead', handler);
+        return () => ipcRenderer.removeListener('sp404:pattern:playhead', handler);
+      },
+    },
   },
   emx1: {
     listPorts: () =>

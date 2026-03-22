@@ -54,6 +54,8 @@ import { CamelotService } from './services/camelot.service.js';
 import { registerHarmonicHandlers } from './ipc/harmonicHandlers.js';
 import { LoopDetectorService } from './services/loop-detector.service.js';
 import { registerLoopHandlers } from './ipc/loopHandlers.js';
+import { SP404CompanionService } from './services/sp404-companion.service.js';
+import { registerSP404CompanionHandlers } from './ipc/sp404CompanionHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -87,6 +89,7 @@ modelRegistry.register(stableAudioAdapter);
 const generationService = new GenerationService(modelRegistry, fileService);
 const camelotService = new CamelotService();
 const loopDetectorService = new LoopDetectorService();
+const sp404CompanionService = new SP404CompanionService(db, audioService);
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -109,6 +112,7 @@ registerGenerationHandlers(ipcMain, generationService, queueService);
 registerAudioToMidiHandlers(ipcMain, audioToMidiService, midiFilesService, queueService);
 registerHarmonicHandlers(ipcMain, camelotService);
 registerLoopHandlers(ipcMain, loopDetectorService);
+registerSP404CompanionHandlers(ipcMain, sp404CompanionService, audioService, sp404Service, () => mainWindow?.webContents);
 // Note: registerWatcherHandlers and registerMidiHandlers are called in createWindow() after mainWindow is set
 
 function ensureDir(dir: string) {

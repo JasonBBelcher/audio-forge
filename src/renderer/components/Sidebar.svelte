@@ -36,6 +36,7 @@
       items: [
         { id: 'koala', label: 'Koala Kit', icon: '🐨' },
         { id: 'sp404', label: 'SP-404 MK2', icon: '🎛' },
+        { id: 'sp404-companion', label: 'SP-404 Companion', icon: '🎚' },
         { id: 'emx1', label: 'EMX-1 Electribe', icon: '🎹' },
       ],
     },
