@@ -56,6 +56,8 @@ import { LoopDetectorService } from './services/loop-detector.service.js';
 import { registerLoopHandlers } from './ipc/loopHandlers.js';
 import { SP404CompanionService } from './services/sp404-companion.service.js';
 import { registerSP404CompanionHandlers } from './ipc/sp404CompanionHandlers.js';
+import { SP404MidiService } from './services/sp404-midi.service.js';
+import { registerSP404MidiHandlers } from './ipc/sp404MidiHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -90,6 +92,7 @@ const generationService = new GenerationService(modelRegistry, fileService);
 const camelotService = new CamelotService();
 const loopDetectorService = new LoopDetectorService();
 const sp404CompanionService = new SP404CompanionService(db, audioService);
+const sp404MidiService = new SP404MidiService();
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -112,7 +115,8 @@ registerGenerationHandlers(ipcMain, generationService, queueService);
 registerAudioToMidiHandlers(ipcMain, audioToMidiService, midiFilesService, queueService);
 registerHarmonicHandlers(ipcMain, camelotService);
 registerLoopHandlers(ipcMain, loopDetectorService);
-registerSP404CompanionHandlers(ipcMain, sp404CompanionService, audioService, sp404Service, () => mainWindow?.webContents);
+registerSP404CompanionHandlers(ipcMain, sp404CompanionService, audioService, sp404Service, () => mainWindow?.webContents, sp404MidiService);
+registerSP404MidiHandlers(ipcMain, sp404MidiService, () => mainWindow?.webContents);
 // Note: registerWatcherHandlers and registerMidiHandlers are called in createWindow() after mainWindow is set
 
 function ensureDir(dir: string) {
@@ -336,4 +340,5 @@ app.on('activate', () => {
 // Clean up watchers on app quit
 app.on('before-quit', () => {
   folderWatcherService.unwatchAll();
+  sp404MidiService.disconnect();
 });
