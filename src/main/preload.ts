@@ -159,6 +159,30 @@ const api = {
         return () => ipcRenderer.removeListener('sp404:pattern:playhead', handler);
       },
     },
+    midi: {
+      listPorts: () => ipcRenderer.invoke('sp404:midi:listPorts'),
+      connect: (inputPort: string, outputPort: string) =>
+        ipcRenderer.invoke('sp404:midi:connect', inputPort, outputPort),
+      disconnect: () => ipcRenderer.invoke('sp404:midi:disconnect'),
+      getStatus: () => ipcRenderer.invoke('sp404:midi:getStatus'),
+      onStatus: (cb: (status: { connected: boolean; portName: string | null }) => void) => {
+        const handler = (_: unknown, status: { connected: boolean; portName: string | null }) => cb(status);
+        ipcRenderer.on('sp404:midi:status', handler);
+        return () => ipcRenderer.removeListener('sp404:midi:status', handler);
+      },
+      onBpm: (cb: (evt: { bpm: number }) => void) => {
+        const handler = (_: unknown, evt: { bpm: number }) => cb(evt);
+        ipcRenderer.on('sp404:midi:bpm', handler);
+        return () => ipcRenderer.removeListener('sp404:midi:bpm', handler);
+      },
+    },
+    pad: {
+      onTrigger: (cb: (evt: { note: number; padLabel: string | null; velocity: number; on: boolean }) => void) => {
+        const handler = (_: unknown, evt: { note: number; padLabel: string | null; velocity: number; on: boolean }) => cb(evt);
+        ipcRenderer.on('sp404:pad:trigger', handler);
+        return () => ipcRenderer.removeListener('sp404:pad:trigger', handler);
+      },
+    },
   },
   emx1: {
     listPorts: () =>

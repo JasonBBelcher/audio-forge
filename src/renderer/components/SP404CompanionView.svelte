@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import SP404TransportBar from './SP404TransportBar.svelte';
   import SP404WaveformEditor from './SP404WaveformEditor.svelte';
   import SP404ChopVisualizer from './SP404ChopVisualizer.svelte';
   import SP404StepGrid from './SP404StepGrid.svelte';
   import SP404VelocityLane from './SP404VelocityLane.svelte';
+  import SP404MidiSetup from './SP404MidiSetup.svelte';
 
   const af = (window as any).audioforge;
 
@@ -13,6 +14,10 @@
   let playing = false;
   let bpm = 120;
   let midiConnected = false;
+  let midiPortName: string | null = null;
+  let syncSource: 'hardware' | 'app' | 'free' = 'free';
+  let showMidiSetup = false;
+  let triggeredPads: Set<string> = new Set();
   let activeStep: number | null = null;
   let pattern: any = null;
   let selectedPartIndex = 0;
@@ -23,23 +28,15 @@
   let padRef = 'A01';
   let selectedChop: number | null = null;
 
-  // Current part's velocities for velocity lane
-  $: selectedPartVelocities = pattern?.parts[selectedPartIndex]?.steps?.map((s: any) => s.velocity) ?? Array(16).fill(100);
+  // Internal clock handle — used only when MIDI is not connected
+  let clockInterval: ReturnType<typeof setInterval> | null = null;
 
-  onMount(async () => {
-    // Load default pattern
-    pattern = await af.sp404.pattern.load('P01');
-    bpm = pattern?.bpm ?? 120;
-  });
-
-  async function handlePlay() {
-    await af.sp404.transport.play();
-    playing = true;
-    // Internal clock for preview when no MIDI
+  function startClock() {
+    stopClock();
     let step = 0;
-    const interval = setInterval(() => {
+    clockInterval = setInterval(() => {
       if (!playing) {
-        clearInterval(interval);
+        stopClock();
         return;
       }
       activeStep = step;
@@ -47,10 +44,117 @@
     }, (60 / bpm / 4) * 1000);
   }
 
+  function stopClock() {
+    if (clockInterval !== null) {
+      clearInterval(clockInterval);
+      clockInterval = null;
+    }
+  }
+
+  // Current part's velocities for velocity lane
+  $: selectedPartVelocities = pattern?.parts[selectedPartIndex]?.steps?.map((s: any) => s.velocity) ?? Array(16).fill(100);
+
+  // Unsubscribe handles
+  let removeTransportState: (() => void) | undefined;
+  let removePlayhead: (() => void) | undefined;
+  let removePadTrigger: (() => void) | undefined;
+  let removeMidiStatus: (() => void) | undefined;
+  let removeMidiBpm: (() => void) | undefined;
+
+  onMount(async () => {
+    // Load default pattern
+    pattern = await af.sp404.pattern.load('P01');
+    bpm = pattern?.bpm ?? 120;
+
+    // Subscribe to transport state from hardware
+    removeTransportState = af.sp404.transport.onState((state: { playing: boolean; bpm: number; source: 'hardware' | 'app' }) => {
+      playing = state.playing;
+      bpm = state.bpm;
+      syncSource = state.source;
+      // When hardware says stop, ensure internal clock is off
+      if (!state.playing) stopClock();
+    });
+
+    // Subscribe to playhead from hardware clock
+    removePlayhead = af.sp404.transport.onPlayhead((pos: { step: number }) => {
+      if (midiConnected) {
+        activeStep = pos.step;
+      }
+    });
+
+    // Subscribe to pad triggers
+    removePadTrigger = af.sp404.pad.onTrigger((evt: { note: number; padLabel: string | null; velocity: number; on: boolean }) => {
+      if (evt.padLabel && evt.on) {
+        const label = evt.padLabel;
+        triggeredPads = new Set([...triggeredPads, label]);
+        setTimeout(() => {
+          triggeredPads = new Set([...triggeredPads].filter(p => p !== label));
+        }, 200);
+      }
+    });
+
+    // Subscribe to MIDI connection status
+    removeMidiStatus = af.sp404.midi.onStatus((s: { connected: boolean; portName: string | null }) => {
+      midiConnected = s.connected;
+      midiPortName = s.portName;
+      syncSource = s.connected ? 'hardware' : 'free';
+      if (!s.connected) {
+        // Disconnected mid-session — fall back to internal clock if playing
+        if (playing) startClock();
+      }
+    });
+
+    // Subscribe to BPM updates from hardware clock
+    removeMidiBpm = af.sp404.midi.onBpm((evt: { bpm: number }) => {
+      bpm = evt.bpm;
+    });
+
+    // Fetch initial MIDI status
+    try {
+      const s = await af.sp404.midi.getStatus();
+      midiConnected = s.connected;
+      midiPortName = s.portName;
+      if (s.connected) {
+        syncSource = 'hardware';
+        bpm = s.bpm;
+        playing = s.playing;
+      }
+    } catch (_) {
+      // non-fatal — defaults remain
+    }
+  });
+
+  onMount(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  onDestroy(() => {
+    stopClock();
+    removeTransportState?.();
+    removePlayhead?.();
+    removePadTrigger?.();
+    removeMidiStatus?.();
+    removeMidiBpm?.();
+  });
+
+  async function handlePlay() {
+    await af.sp404.transport.play();
+    if (!midiConnected) {
+      playing = true;
+      startClock();
+    }
+    // If MIDI connected, wait for hardware confirmation via onState
+  }
+
   async function handleStop() {
     await af.sp404.transport.stop();
-    playing = false;
-    activeStep = null;
+    if (!midiConnected) {
+      playing = false;
+      activeStep = null;
+      stopClock();
+    }
+    // If MIDI connected, wait for hardware confirmation via onState
   }
 
   async function handleBpmChange(e: CustomEvent<{ bpm: number }>) {
@@ -60,6 +164,10 @@
       await af.sp404.pattern.save(pattern);
     }
     await af.sp404.transport.setBpm(bpm);
+    // Restart internal clock at new BPM if it's running
+    if (!midiConnected && playing) {
+      startClock();
+    }
   }
 
   async function handleToggleStep(e: CustomEvent<{ partIndex: number; step: number }>) {
@@ -128,11 +236,6 @@
       if (pattern) af.sp404.pattern.save(pattern);
     }
   }
-
-  onMount(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  });
 </script>
 
 <div class="companion-view">
@@ -140,9 +243,12 @@
     {bpm}
     {playing}
     {midiConnected}
+    {midiPortName}
+    {syncSource}
     on:play={handlePlay}
     on:stop={handleStop}
     on:bpmChange={handleBpmChange}
+    on:midiSetup={() => (showMidiSetup = true)}
   />
 
   <div class="mode-tabs">
@@ -178,6 +284,7 @@
           parts={pattern.parts}
           {activeStep}
           {playing}
+          {triggeredPads}
           on:toggleStep={handleToggleStep}
           on:setVelocity={handleSetVelocity}
         />
@@ -187,7 +294,7 @@
           on:change={handleVelocityChange}
         />
       {:else}
-        <div class="loading">Loading pattern…</div>
+        <div class="loading">Loading pattern\u2026</div>
       {/if}
     {:else}
       <div class="perform-layout">
@@ -201,6 +308,18 @@
       </div>
     {/if}
   </div>
+
+  {#if showMidiSetup}
+    <SP404MidiSetup
+      on:close={() => (showMidiSetup = false)}
+      on:connected={(e) => {
+        midiConnected = true;
+        midiPortName = e.detail.portName;
+        syncSource = 'hardware';
+        showMidiSetup = false;
+      }}
+    />
+  {/if}
 </div>
 
 <style>

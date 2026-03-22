@@ -4,6 +4,7 @@
   export let parts: any[] = [];
   export let activeStep: number | null = null;
   export let playing: boolean = false;
+  export let triggeredPads: Set<string> = new Set();
 
   const dispatch = createEventDispatcher<{
     toggleStep: { partIndex: number; step: number };
@@ -14,6 +15,10 @@
   let dragStep: number | null = null;
   let dragStartY: number = 0;
   let dragStartVelocity: number = 100;
+
+  function normalizePadRef(ref: string): string {
+    return ref.replace(/^([A-Z])0*(\d+)$/, '$1$2');
+  }
 
   function handleCellClick(partIndex: number, step: number) {
     dispatch('toggleStep', { partIndex, step });
@@ -59,7 +64,7 @@
   </div>
 
   {#each parts as part, partIndex}
-    <div class="grid-row">
+    <div class="grid-row" class:pad-flash={triggeredPads.has(normalizePadRef(part.padRef ?? ''))}>
       <div class="row-meta">
         <div class="part-color" style="background:{part.color}"></div>
         <span class="part-label">{part.label}</span>
@@ -129,6 +134,13 @@
     align-items: center;
     gap: 1px;
     min-height: 36px;
+  }
+  .pad-flash {
+    animation: padFlash 0.2s ease-out;
+  }
+  @keyframes padFlash {
+    0%   { background: rgba(100, 181, 246, 0.3); }
+    100% { background: transparent; }
   }
   .row-meta {
     width: 140px;
