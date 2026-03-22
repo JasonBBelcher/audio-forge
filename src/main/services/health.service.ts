@@ -46,8 +46,9 @@ export const TOOL_INSTALLERS: Record<string, PlatformInstallers> = {
     win32:  { command: 'pip3', args: ['install', 'aubio'] },
   },
   demucs: {
-    darwin: { command: 'pip3', args: ['install', 'demucs'] },
-    linux:  { command: 'pip3', args: ['install', 'demucs'] },
+    // macOS system Python is externally managed (PEP 668) — use pipx for isolation
+    darwin: { command: 'pipx', args: ['install', 'demucs'] },
+    linux:  { command: 'pipx', args: ['install', 'demucs'] },
     win32:  { command: 'pip3', args: ['install', 'demucs'] },
   },
 };

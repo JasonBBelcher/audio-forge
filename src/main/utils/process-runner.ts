@@ -1,10 +1,14 @@
 import { spawn } from 'child_process';
 
+import os from 'os';
+
 // Electron strips the shell PATH. Re-inject common tool locations so
 // yt-dlp, ffmpeg, aubio etc. are found regardless of how the app is launched.
 const TOOL_PATHS = [
-  '/opt/homebrew/bin',   // Apple Silicon Homebrew
-  '/usr/local/bin',      // Intel Homebrew
+  '/opt/homebrew/bin',                                  // Apple Silicon Homebrew
+  '/usr/local/bin',                                     // Intel Homebrew
+  `${os.homedir()}/.local/bin`,                         // pipx installs (all platforms)
+  `${os.homedir()}/.audioforge-venv/bin`,               // AudioForge Python venv
   '/usr/bin',
   '/bin',
   '/usr/sbin',
