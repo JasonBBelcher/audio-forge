@@ -28,6 +28,7 @@
   import SP404KitBuilder from './SP404KitBuilder.svelte';
   import SP404CompanionView from './SP404CompanionView.svelte';
   import EMX1View from './EMX1View.svelte';
+  import SetupWizard from './SetupWizard.svelte';
   import HealthPanel from './HealthPanel.svelte';
   import JobsPanel from './JobsPanel.svelte';
   import WaveEditor from './WaveEditor.svelte';
@@ -45,6 +46,13 @@
   let dragSourceIndex: number | null = null;
   let dragOverIndex: number | null = null;
   let activeView = 'library';
+  let showSetupWizard = false;
+
+  // Show setup wizard on first launch (before setupComplete is set in settings)
+  const af = (window as any).audioforge;
+  af.settings.get('setupComplete').then((complete: boolean | null) => {
+    if (!complete) showSetupWizard = true;
+  });
   let selectedFilePath: string | null = null;
   let selectedFileName: string | null = null;
   let previewFilePath: string = '';
@@ -327,6 +335,10 @@
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />
+
+{#if showSetupWizard}
+  <SetupWizard on:done={() => (showSetupWizard = false)} />
+{/if}
 
 {#if !project}
   <div class="editor-empty">
