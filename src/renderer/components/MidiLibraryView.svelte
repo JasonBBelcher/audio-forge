@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, afterUpdate } from 'svelte';
+  import { Midi } from '@tonejs/midi';
 
   interface MidiFileInfo {
     id: number;
@@ -16,6 +17,12 @@
     created_at?: string;
   }
 
+  interface MidiNote {
+    pitch: number;
+    time: number;
+    duration: number;
+  }
+
   let midiFiles: MidiFileInfo[] = [];
   let filteredFiles: MidiFileInfo[] = [];
   let loading = false;
@@ -30,6 +37,22 @@
   let sortDir: 'asc' | 'desc' = 'asc';
 
   let unsubscribers: Array<() => void> = [];
+
+  // Piano roll state
+  let canvas: HTMLCanvasElement | null = null;
+  let midiNotes: MidiNote[] = [];
+  let midiDuration: number = 0;
+  let minPitch: number = 0;
+  let maxPitch: number = 127;
+
+  // Playback state
+  let isPlaying = false;
+  let currentTime = 0;
+  let audioContext: AudioContext | null = null;
+  let playbackStartTime = 0;
+  let playbackFrameId: number | null = null;
+  let activeOscillators: OscillatorNode[] = [];
+  let activeGains: GainNode[] = [];
 
   function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -109,10 +132,46 @@
     applyFiltersAndSort();
   }
 
-  function handleRowClick(midi: MidiFileInfo): void {
+  async function handleRowClick(midi: MidiFileInfo): Promise<void> {
     selectedMidi = midi;
     newTags = midi.tags?.join(', ') || '';
     loadLinkedAssets(midi.id);
+
+    // Load and parse MIDI file
+    try {
+      const af = (window as any).audioforge;
+      const arrayBuffer = await af.files.readAsArrayBuffer(midi.file_path);
+      const midiFile = new Midi(arrayBuffer);
+
+      // Extract all notes from all tracks
+      const notes: MidiNote[] = [];
+      for (const track of midiFile.tracks) {
+        for (const note of track.notes) {
+          notes.push({
+            pitch: note.midi,
+            time: note.time,
+            duration: note.duration
+          });
+        }
+      }
+
+      midiNotes = notes;
+      midiDuration = midiFile.duration;
+
+      // Calculate min/max pitch
+      if (notes.length > 0) {
+        const pitches = notes.map(n => n.pitch);
+        minPitch = Math.max(0, Math.min(...pitches) - 5);
+        maxPitch = Math.min(127, Math.max(...pitches) + 5);
+      }
+
+      currentTime = 0;
+      if (isPlaying) {
+        stopPlayback();
+      }
+    } catch (e) {
+      console.error('Failed to load MIDI file:', e);
+    }
   }
 
   async function loadLinkedAssets(midiId: number): Promise<void> {
@@ -209,6 +268,154 @@
     }
   }
 
+  function drawPianoRoll(): void {
+    if (!canvas || !selectedMidi) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    const pitchRange = maxPitch - minPitch + 1;
+
+    // Clear canvas
+    ctx.fillStyle = '#0d0d0d';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Draw middle C line (pitch 60)
+    if (minPitch <= 60 && 60 <= maxPitch) {
+      const yPos = ((maxPitch - 60) / pitchRange) * canvasHeight;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, yPos);
+      ctx.lineTo(canvasWidth, yPos);
+      ctx.stroke();
+    }
+
+    // Draw notes
+    ctx.fillStyle = 'rgba(100, 181, 246, 0.8)';
+    for (const note of midiNotes) {
+      const x = (note.time / midiDuration) * canvasWidth;
+      const width = (note.duration / midiDuration) * canvasWidth;
+      const y = ((maxPitch - note.pitch) / pitchRange) * canvasHeight;
+      const height = (1 / pitchRange) * canvasHeight;
+
+      if (width > 0 && height > 0) {
+        ctx.fillRect(x, y, Math.max(width, 1), Math.max(height, 1));
+      }
+    }
+
+    // Draw current time indicator
+    if (isPlaying && midiDuration > 0) {
+      const xPos = (currentTime / midiDuration) * canvasWidth;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xPos, 0);
+      ctx.lineTo(xPos, canvasHeight);
+      ctx.stroke();
+    }
+  }
+
+  function startPlayback(): void {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+
+    // Resume context if suspended
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
+    isPlaying = true;
+    playbackStartTime = audioContext.currentTime - currentTime;
+
+    // Schedule all notes
+    for (const note of midiNotes) {
+      const startTime = playbackStartTime + note.time;
+      const endTime = startTime + note.duration;
+
+      // Create oscillator and gain
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.value = 440 * Math.pow(2, (note.pitch - 69) / 12);
+
+      // Envelope: ramp up over 10ms, ramp down over 50ms
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
+      gain.gain.linearRampToValueAtTime(0, endTime - 0.05);
+
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+
+      osc.start(startTime);
+      osc.stop(endTime);
+
+      activeOscillators.push(osc);
+      activeGains.push(gain);
+    }
+
+    // Update playback position
+    updatePlaybackPosition();
+  }
+
+  function stopPlayback(): void {
+    isPlaying = false;
+
+    // Stop all oscillators
+    for (const osc of activeOscillators) {
+      try {
+        osc.stop();
+      } catch (e) {
+        // Already stopped
+      }
+    }
+
+    activeOscillators = [];
+    activeGains = [];
+
+    if (playbackFrameId !== null) {
+      cancelAnimationFrame(playbackFrameId);
+      playbackFrameId = null;
+    }
+
+    // Redraw canvas to clear playback line
+    if (canvas) {
+      drawPianoRoll();
+    }
+  }
+
+  function updatePlaybackPosition(): void {
+    if (!audioContext || !isPlaying) return;
+
+    currentTime = audioContext.currentTime - playbackStartTime;
+
+    // Clamp to duration
+    if (currentTime >= midiDuration) {
+      stopPlayback();
+      currentTime = 0;
+      return;
+    }
+
+    // Redraw canvas with updated position
+    if (canvas) {
+      drawPianoRoll();
+    }
+
+    playbackFrameId = requestAnimationFrame(updatePlaybackPosition);
+  }
+
+  function togglePlayback(): void {
+    if (isPlaying) {
+      stopPlayback();
+    } else {
+      startPlayback();
+    }
+  }
+
   onMount(async () => {
     loading = true;
     error = null;
@@ -247,6 +454,18 @@
 
   onDestroy(() => {
     unsubscribers.forEach((unsub) => unsub());
+    if (isPlaying) {
+      stopPlayback();
+    }
+    if (audioContext) {
+      audioContext.close();
+    }
+  });
+
+  afterUpdate(() => {
+    if (selectedMidi && canvas) {
+      drawPianoRoll();
+    }
   });
 </script>
 
@@ -356,6 +575,40 @@
           <button class="close-btn" onclick={() => (selectedMidi = null)}>×</button>
         </div>
 
+        <!-- Piano Roll Section (Fixed Top) -->
+        <div class="piano-roll-section">
+          <canvas
+            bind:this={canvas}
+            width={276}
+            height={160}
+            class="piano-roll-canvas"
+          ></canvas>
+
+          <!-- Transport Controls -->
+          <div class="transport-bar">
+            <button
+              class="play-btn"
+              onclick={togglePlayback}
+              title={isPlaying ? 'Stop' : 'Play'}
+            >
+              {isPlaying ? '⏹' : '▶'}
+            </button>
+
+            <div class="time-display">
+              {formatDuration(currentTime)} / {formatDuration(midiDuration)}
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-bar-container">
+              <div
+                class="progress-bar-fill"
+                style="width: {midiDuration > 0 ? (currentTime / midiDuration) * 100 : 0}%"
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scrollable Content -->
         <div class="detail-content">
           <!-- Metadata -->
           <div class="metadata-section">
@@ -670,6 +923,68 @@
 
   .close-btn:hover {
     color: rgba(255, 255, 255, 0.9);
+  }
+
+  .piano-roll-section {
+    flex-shrink: 0;
+    padding: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .piano-roll-canvas {
+    width: 100%;
+    height: 160px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    background: #0d0d0d;
+    display: block;
+  }
+
+  .transport-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .play-btn {
+    padding: 4px 8px;
+    background: rgba(100, 181, 246, 0.2);
+    border: 1px solid rgba(100, 181, 246, 0.4);
+    border-radius: 3px;
+    color: #64b5f6;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .play-btn:hover {
+    background: rgba(100, 181, 246, 0.3);
+  }
+
+  .time-display {
+    min-width: 50px;
+    text-align: right;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  }
+
+  .progress-bar-container {
+    flex: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: #64b5f6;
+    transition: width 0.05s linear;
   }
 
   .detail-content {
