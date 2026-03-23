@@ -25,6 +25,8 @@
   import CollectionsView from './CollectionsView.svelte';
   import MidiLibraryView from './MidiLibraryView.svelte';
   import AIGenerateView from './AIGenerateView.svelte';
+  import AudioToMidiView from './AudioToMidiView.svelte';
+  import LoopDetectorPanel from './LoopDetectorPanel.svelte';
   import KoalaKitBuilder from './KoalaKitBuilder.svelte';
   import SP404KitBuilder from './SP404KitBuilder.svelte';
   import SP404CompanionView from './SP404CompanionView.svelte';
@@ -470,6 +472,10 @@
               <h2>Wave Editor</h2>
             {:else if activeView === 'ai-generate'}
               <h2>✨ AI Generate</h2>
+            {:else if activeView === 'audio-to-midi'}
+              <h2>🎹 Audio → MIDI</h2>
+            {:else if activeView === 'loop-detect'}
+              <h2>🔁 Loop Detect</h2>
             {/if}
           </div>
           <div class="top-bar-right">
@@ -494,6 +500,10 @@
             <CollectionsView />
           {:else if activeView === 'ai-generate'}
             <AIGenerateView />
+          {:else if activeView === 'audio-to-midi'}
+            <AudioToMidiView />
+          {:else if activeView === 'loop-detect'}
+            <LoopDetectorPanel filePath={selectedFilePath || ''} />
           {:else if activeView === 'koala'}
             <KoalaKitBuilder />
           {:else if activeView === 'sp404'}

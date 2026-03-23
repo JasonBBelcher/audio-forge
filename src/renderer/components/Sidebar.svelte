@@ -38,6 +38,13 @@
       ],
     },
     {
+      label: 'CREATE',
+      items: [
+        { id: 'audio-to-midi', label: 'Audio → MIDI', icon: '🎹' },
+        { id: 'loop-detect', label: 'Loop Detect', icon: '🔁' },
+      ],
+    },
+    {
       label: 'HARDWARE',
       items: [
         { id: 'koala', label: 'Koala Kit', icon: '🐨' },

@@ -55,6 +55,12 @@
   let stemSeparationAsset: Asset | null = null;
   let showStemModal = false;
 
+  // Camelot codes cache
+  let camelotCodesCache = new Map<string, string>();
+
+  // Compatible keys
+  let compatibleKeys: any[] = [];
+
   function downsample(peaks: number[], target: number): number[] {
     if (peaks.length <= target) return peaks;
     const step = peaks.length / target;
@@ -242,8 +248,36 @@
     applyFiltersAndSearch();
   }
 
-  function handleKeyFilterChange(e: Event): void {
+  async function handleKeyFilterChange(e: Event): Promise<void> {
     filterKey = (e.target as HTMLSelectElement).value;
+
+    // Fetch compatible keys if a key is selected
+    if (filterKey) {
+      try {
+        const af = (window as any).audioforge;
+        compatibleKeys = await af.harmonic?.getCompatibleKeys(filterKey) || [];
+      } catch (e) {
+        console.error('Failed to fetch compatible keys:', e);
+        compatibleKeys = [];
+      }
+    } else {
+      compatibleKeys = [];
+    }
+
+    applyFiltersAndSearch();
+  }
+
+  async function handleCompatibleKeyClick(key: string): Promise<void> {
+    filterKey = key;
+
+    try {
+      const af = (window as any).audioforge;
+      compatibleKeys = await af.harmonic?.getCompatibleKeys(key) || [];
+    } catch (e) {
+      console.error('Failed to fetch compatible keys:', e);
+      compatibleKeys = [];
+    }
+
     applyFiltersAndSearch();
   }
 
@@ -272,6 +306,26 @@
   function formatKey(key: string | undefined): string {
     if (!key) return '-';
     return key;
+  }
+
+  async function getCamelotCode(key: string): Promise<string> {
+    if (!key) return '';
+
+    if (camelotCodesCache.has(key)) {
+      return camelotCodesCache.get(key) || '';
+    }
+
+    try {
+      const af = (window as any).audioforge;
+      const code = await af.harmonic?.getCode(key);
+      if (code) {
+        camelotCodesCache.set(key, code);
+        camelotCodesCache = new Map(camelotCodesCache);
+      }
+      return code || '';
+    } catch (e) {
+      return '';
+    }
   }
 
   function getSortArrow(col: typeof sortColumn): string {
@@ -557,6 +611,35 @@
             <option value={key}>{key}</option>
           {/each}
         </select>
+
+        {#if filterKey && compatibleKeys.length > 0}
+          <div class="compatible-keys-section">
+            <div class="camelot-code">
+              {#await getCamelotCode(filterKey) then code}
+                {#if code}
+                  <span class="code-display">{code}</span>
+                {/if}
+              {/await}
+            </div>
+
+            <div class="compatible-keys">
+              {#each compatibleKeys.slice(1) as match (match.key)}
+                <button
+                  class="compatible-key-btn"
+                  onclick={() => handleCompatibleKeyClick(match.key)}
+                  title={match.description}
+                >
+                  {match.key}
+                  {#if match.relationship === 'energy-boost'}
+                    <span class="energy-indicator">↑</span>
+                  {:else if match.relationship === 'energy-drop'}
+                    <span class="energy-indicator">↓</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -610,7 +693,18 @@
                   <WaveformSparkline peaks={peaksCache.get(asset.id) ?? []} width={80} height={24} />
                 </td>
                 <td class="col-bpm">{formatBpm(asset.bpm)}</td>
-                <td class="col-key">{formatKey(asset.key)}</td>
+                <td class="col-key">
+                  <div class="key-cell">
+                    <span>{formatKey(asset.key)}</span>
+                    {#if asset.key}
+                      {#await getCamelotCode(asset.key) then camelotCode}
+                        {#if camelotCode}
+                          <span class="camelot-badge">{camelotCode}</span>
+                        {/if}
+                      {/await}
+                    {/if}
+                  </div>
+                </td>
                 <td class="col-duration">{formatDuration(asset.duration)}</td>
                 <td class="col-type">
                   <span class="type-badge">{asset.file_type}</span>
@@ -951,6 +1045,80 @@
     font-weight: 500;
     font-size: 10px;
     text-transform: uppercase;
+  }
+
+  .key-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .camelot-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    background: rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(76, 175, 80, 0.4);
+    border-radius: 3px;
+    color: #4caf50;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .compatible-keys-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .camelot-code {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .code-display {
+    display: inline-block;
+    padding: 4px 8px;
+    background: rgba(100, 181, 246, 0.2);
+    border: 1px solid rgba(100, 181, 246, 0.4);
+    border-radius: 4px;
+    color: #64b5f6;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .compatible-keys {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .compatible-key-btn {
+    padding: 4px 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .compatible-key-btn:hover {
+    background: rgba(100, 181, 246, 0.3);
+    border-color: rgba(100, 181, 246, 0.5);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .energy-indicator {
+    font-size: 10px;
+    opacity: 0.7;
   }
 
   .context-menu {

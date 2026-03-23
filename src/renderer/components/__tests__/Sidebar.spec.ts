@@ -13,7 +13,7 @@ describe('Sidebar Component', () => {
     it('renders all navigation groups', () => {
       const { container } = render(Sidebar, { props: { activeView: 'library' } });
       const groups = container.querySelectorAll('.nav-group');
-      expect(groups.length).toBe(5);
+      expect(groups.length).toBe(6);
     });
 
     it('renders LIBRARY group', () => {
@@ -84,6 +84,20 @@ describe('Sidebar Component', () => {
       expect(aiGenerateItem).toBeTruthy();
     });
 
+    it('renders Audio → MIDI nav item', () => {
+      const { container } = render(Sidebar, { props: { activeView: 'library' } });
+      const items = Array.from(container.querySelectorAll('.nav-item'));
+      const audioToMidiItem = items.find(el => el.textContent?.includes('Audio → MIDI'));
+      expect(audioToMidiItem).toBeTruthy();
+    });
+
+    it('renders Loop Detect nav item', () => {
+      const { container } = render(Sidebar, { props: { activeView: 'library' } });
+      const items = Array.from(container.querySelectorAll('.nav-item'));
+      const loopDetectItem = items.find(el => el.textContent?.includes('Loop Detect'));
+      expect(loopDetectItem).toBeTruthy();
+    });
+
     it('renders Koala Kit nav item', () => {
       const { container } = render(Sidebar, { props: { activeView: 'library' } });
       const items = Array.from(container.querySelectorAll('.nav-item'));
@@ -143,7 +157,7 @@ describe('Sidebar Component', () => {
     });
 
     it('can click each nav item', async () => {
-      const viewIds = ['library', 'import', 'collections', 'ai-generate', 'koala', 'settings'];
+      const viewIds = ['library', 'import', 'collections', 'ai-generate', 'audio-to-midi', 'loop-detect', 'koala', 'settings'];
 
       for (const viewId of viewIds) {
         const { container } = render(Sidebar, { props: { activeView: 'library' } });
@@ -156,7 +170,7 @@ describe('Sidebar Component', () => {
     });
 
     it('works with different initial active views', () => {
-      const viewIds = ['library', 'import', 'collections', 'ai-generate', 'koala', 'settings'];
+      const viewIds = ['library', 'import', 'collections', 'ai-generate', 'audio-to-midi', 'loop-detect', 'koala', 'settings'];
 
       viewIds.forEach(viewId => {
         const { container } = render(Sidebar, { props: { activeView: viewId } });
