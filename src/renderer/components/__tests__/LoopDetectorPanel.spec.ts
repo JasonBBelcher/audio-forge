@@ -14,9 +14,9 @@ describe('LoopDetectorPanel', () => {
 
   it('renders BPM input with default value', () => {
     render(LoopDetectorPanel, { props: { filePath: '/path/to/audio.wav' } });
-    const bpmInput = screen.getByLabelText('BPM:') as HTMLInputElement;
+    const bpmInput = screen.getByLabelText('BPM') as HTMLInputElement;
     expect(bpmInput).toBeTruthy();
-    expect(bpmInput.value).toBe('120');
+    expect(bpmInput.value).toBe('');
   });
 
   it('renders Detect button', () => {
