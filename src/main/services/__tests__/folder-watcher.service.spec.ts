@@ -40,6 +40,7 @@ describe('FolderWatcherService', () => {
         file_size: 1000,
         created_at: new Date().toISOString(),
       }),
+      listFiles: vi.fn().mockReturnValue([]),
     };
 
     analysisPipelineService = {
@@ -61,14 +62,26 @@ describe('FolderWatcherService', () => {
   });
 
   describe('watchFolder', () => {
-    it('calls fs.watch with the given path and persistent: false', () => {
+    it('calls fs.watch with the given path and persistent: false, recursive: true', () => {
       const folderPath = '/path/to/sync/folder';
 
       service.watchFolder(folderPath);
 
       expect(watch).toHaveBeenCalledWith(
         folderPath,
-        { persistent: false },
+        { persistent: false, recursive: true },
+        expect.any(Function)
+      );
+    });
+
+    it('passes recursive: true to fs.watch for subdirectory support', () => {
+      const folderPath = '/path/to/sync/folder';
+
+      service.watchFolder(folderPath);
+
+      expect(watch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ recursive: true }),
         expect.any(Function)
       );
     });
@@ -262,7 +275,7 @@ describe('FolderWatcherService', () => {
       expect(fileService.importFile).not.toHaveBeenCalled();
 
       // Advance time by 500ms
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       // After debounce, importFile should be called
@@ -281,7 +294,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.mp3');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).toHaveBeenCalledWith('/path/to/sync/folder/test.mp3');
@@ -299,7 +312,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.flac');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).toHaveBeenCalledWith('/path/to/sync/folder/test.flac');
@@ -317,7 +330,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.aiff');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).toHaveBeenCalledWith('/path/to/sync/folder/test.aiff');
@@ -335,7 +348,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.ogg');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).toHaveBeenCalledWith('/path/to/sync/folder/test.ogg');
@@ -353,7 +366,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.m4a');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).toHaveBeenCalledWith('/path/to/sync/folder/test.m4a');
@@ -371,7 +384,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.aac');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).toHaveBeenCalledWith('/path/to/sync/folder/test.aac');
@@ -391,7 +404,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.wav');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       // File was deleted before we could process it
@@ -410,7 +423,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.WAV');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).toHaveBeenCalledWith('/path/to/sync/folder/test.WAV');
@@ -428,10 +441,43 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', null);
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(fileService.importFile).not.toHaveBeenCalled();
+    });
+
+    it('skips import if file already exists in library', async () => {
+      const folderPath = '/path/to/sync/folder';
+      let watchCallback: any;
+
+      (watch as any).mockImplementation((_path: string, _opts: any, cb: Function) => {
+        watchCallback = cb;
+        return mockWatcher;
+      });
+
+      // Mock listFiles to return an asset with the same filename
+      (fileService.listFiles as any).mockReturnValue([
+        {
+          id: 999,
+          name: 'test.wav',
+          file_path: '/media/existing/test.wav',
+          file_type: 'wav',
+          file_size: 1000,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      service.watchFolder(folderPath);
+      watchCallback('rename', 'test.wav');
+
+      vi.advanceTimersByTime(800);
+      await vi.runAllTimersAsync();
+
+      // importFile should NOT be called since file already exists
+      expect(fileService.importFile).not.toHaveBeenCalled();
+      // analyzeAsset should also NOT be called
+      expect(analysisPipelineService.analyzeAsset).not.toHaveBeenCalled();
     });
   });
 
@@ -448,7 +494,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.wav');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       // Both should be called
@@ -474,7 +520,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.wav');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       expect(onFileAddedCallback).toHaveBeenCalledWith(1, '/media/test.wav');
@@ -494,7 +540,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.wav');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       // Should not throw - error is caught and logged
       await vi.runAllTimersAsync();
 
@@ -518,7 +564,7 @@ describe('FolderWatcherService', () => {
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.wav');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       // Should not throw - error is caught and logged
       await vi.runAllTimersAsync();
 
@@ -555,12 +601,12 @@ describe('FolderWatcherService', () => {
 
       // First file (should fail)
       watchCallback('rename', 'test1.wav');
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       // Second file (should succeed)
       watchCallback('rename', 'test2.wav');
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       // Both should have been attempted
@@ -586,7 +632,7 @@ describe('FolderWatcherService', () => {
       watchCallback('rename', 'test.wav');
       watchCallback('rename', 'test.wav');
 
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
       // Will be called 3 times since each debounce timer is independent
