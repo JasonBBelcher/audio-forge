@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { join } from 'path';
 import { homedir } from 'os';
 import type { TextToAudioAdapter, ModelCapability } from '../model-adapter.js';
+import { detectPlatform, torchInstallArgs } from '../../utils/platform-detector.js';
 
 export class StableAudioAdapter implements TextToAudioAdapter {
   readonly id = 'stable-audio-open';
@@ -21,7 +22,8 @@ export class StableAudioAdapter implements TextToAudioAdapter {
 
   async isInstalled(): Promise<boolean> {
     return new Promise((resolve) => {
-      const proc = spawn(this.pythonVenv, ['-c', 'import stable_audio_tools'], {
+      // Check for diffusers (StableAudioPipeline) + soundfile which our script needs
+      const proc = spawn(this.pythonVenv, ['-c', 'import diffusers, soundfile, torch; from diffusers import StableAudioPipeline'], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -32,22 +34,34 @@ export class StableAudioAdapter implements TextToAudioAdapter {
   }
 
   async install(onProgress?: (pct: number, msg: string) => void): Promise<void> {
+    const platform = detectPlatform();
+    const torchArgs = torchInstallArgs(platform);
+    // diffusers stack + platform-appropriate torch build
+    const packages = ['diffusers', 'transformers', 'accelerate', 'soundfile', ...torchArgs];
+
     return new Promise((resolve, reject) => {
-      const proc = spawn(this.venvPip, ['install', 'stable_audio_tools', 'torchaudio'], {
+      const proc = spawn(this.venvPip, ['install', ...packages], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
-      let output = '';
+      let stdout = '';
+      let stderr = '';
 
       proc.stdout?.on('data', (data) => {
-        output += data.toString();
+        stdout += data.toString();
         if (onProgress) {
-          if (output.includes('Downloading')) {
+          if (stdout.includes('Downloading')) {
             onProgress(25, 'downloading');
-          } else if (output.includes('Installing collected')) {
+          } else if (stdout.includes('Installing collected')) {
             onProgress(75, 'installing');
+          } else if (stdout.includes('Requirement already satisfied')) {
+            onProgress(50, 'already installed');
           }
         }
+      });
+
+      proc.stderr?.on('data', (data) => {
+        stderr += data.toString();
       });
 
       proc.on('close', (code) => {
@@ -57,7 +71,7 @@ export class StableAudioAdapter implements TextToAudioAdapter {
           }
           resolve();
         } else {
-          reject(new Error(`pip install failed with code ${code}`));
+          reject(new Error(`pip install failed with code ${code}: ${stderr || stdout}`));
         }
       });
     });

@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import Button from './ui/Button.svelte';
+
+  interface LibraryAsset {
+    id: number;
+    name: string;
+    file_path: string;
+    bpm?: number;
+  }
 
   interface ConversionResult {
     midiPath: string;
@@ -9,517 +15,835 @@
     estimatedTempo?: number;
   }
 
-  // File selection
-  let selectedFilePath: string = '';
-  let selectedFileName: string = '';
+  const af = (window as any).audioforge;
 
-  // Settings
-  let onsetThreshold: number = 0.5;
-  let minNoteDuration: number = 0.1;
-  let quantizeToGrid: boolean = true;
-  let quantizeResolution: '1/4' | '1/8' | '1/16' | '1/32' = '1/16';
+  // ── Install state ──────────────────────────────────────────────────────────
+  let isInstalled = false;
+  let isInstalling = false;
+  let installError = '';
+  let installJobId: string | null = null;
 
-  // Conversion state
-  let isConverting: boolean = false;
-  let progress: number = 0;
-  let error: string = '';
+  // ── File selection ─────────────────────────────────────────────────────────
+  let selectedFilePath = '';
+  let selectedFileName = '';
+  let libraryAssets: LibraryAsset[] = [];
+
+  // ── Settings ───────────────────────────────────────────────────────────────
+  let onsetThreshold = 0.5;
+  let frameThreshold = 0.3;
+  let minimumNoteLength = 58;   // ms
+  let minFreq = 32.7;           // C1
+  let maxFreq = 1975.5;         // B6
+  let useNoMelodia = true;
+
+  // ── Conversion state ───────────────────────────────────────────────────────
+  let isConverting = false;
+  let progress = 0;
+  let progressMsg = '';
+  let convertJobId: string | null = null;
+  let error = '';
   let result: ConversionResult | null = null;
+  let savedToLibrary = false;
 
-  // IPC progress listener
-  let unsubscribeProgress: (() => void) | null = null;
+  // ── Event subscriptions ────────────────────────────────────────────────────
+  let unsubs: Array<() => void> = [];
 
-  async function selectFile() {
+  onMount(async () => {
+    await Promise.all([checkInstalled(), loadLibrary()]);
+    subscribeToJobs();
+  });
+
+  onDestroy(() => unsubs.forEach((u) => u()));
+
+  async function checkInstalled() {
     try {
-      const af = (window as any).audioforge;
-      const response = await af.files.showOpenDialog({
-        filters: [
-          {
-            name: 'Audio Files',
-            extensions: ['wav', 'mp3', 'flac', 'aiff', 'ogg', 'm4a'],
-          },
-        ],
-      });
-
-      if (response.filePaths && response.filePaths.length > 0) {
-        selectedFilePath = response.filePaths[0];
-        // Extract filename from path
-        const parts = selectedFilePath.split(/[/\\]/);
-        selectedFileName = parts[parts.length - 1];
-        error = '';
-      }
-    } catch (e) {
-      error = `Failed to select file: ${e instanceof Error ? e.message : 'Unknown error'}`;
+      const res = await af.audioToMidi.isInstalled();
+      isInstalled = res?.installed ?? false;
+    } catch {
+      isInstalled = false;
     }
   }
 
-  async function convertToMidi() {
-    if (!selectedFilePath) {
-      error = 'No file selected';
-      return;
+  async function loadLibrary() {
+    try {
+      libraryAssets = (await af.files.list()) ?? [];
+    } catch {
+      libraryAssets = [];
     }
+  }
+
+  function subscribeToJobs() {
+    unsubs.push(
+      af.on('job:progress', (data: any) => {
+        if (data.jobId === convertJobId || data.jobId === installJobId) {
+          progress = Math.min(data.progress ?? 0, 99);
+          progressMsg = data.message ?? '';
+        }
+      })
+    );
+
+    unsubs.push(
+      af.on('job:complete', (data: any) => {
+        if (data.jobId === installJobId) {
+          isInstalling = false;
+          isInstalled = true;
+          installJobId = null;
+          installError = '';
+        }
+        if (data.jobId === convertJobId) {
+          isConverting = false;
+          progress = 100;
+          progressMsg = 'Done!';
+          result = data.result ?? null;
+          convertJobId = null;
+          savedToLibrary = false;
+        }
+      })
+    );
+
+    unsubs.push(
+      af.on('job:failed', (data: any) => {
+        if (data.jobId === installJobId) {
+          isInstalling = false;
+          installError = data.error ?? 'Installation failed';
+          installJobId = null;
+        }
+        if (data.jobId === convertJobId) {
+          isConverting = false;
+          error = data.error ?? 'Conversion failed';
+          convertJobId = null;
+        }
+      })
+    );
+  }
+
+  // ── Install ────────────────────────────────────────────────────────────────
+  async function handleInstall() {
+    isInstalling = true;
+    installError = '';
+    progress = 0;
+    try {
+      const res = await af.audioToMidi.install();
+      installJobId = res?.jobId ?? null;
+    } catch (e: any) {
+      isInstalling = false;
+      installError = e?.message ?? 'Install failed';
+    }
+  }
+
+  // ── File selection ─────────────────────────────────────────────────────────
+  function selectAsset(asset: LibraryAsset) {
+    selectedFilePath = asset.file_path;
+    selectedFileName = asset.name;
+    result = null;
+    error = '';
+    savedToLibrary = false;
+  }
+
+  async function handleBrowse() {
+    try {
+      const res = await af.files.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'Audio', extensions: ['wav', 'mp3', 'flac', 'aiff', 'ogg', 'm4a', 'aac'] }],
+      });
+      if (res.canceled || !res.filePaths?.length) return;
+      selectedFilePath = res.filePaths[0];
+      selectedFileName = selectedFilePath.split('/').pop() ?? selectedFilePath;
+      result = null;
+      error = '';
+      savedToLibrary = false;
+    } catch (e: any) {
+      error = e?.message ?? 'Failed to open file';
+    }
+  }
+
+  // ── Convert ────────────────────────────────────────────────────────────────
+  async function handleConvert() {
+    if (!selectedFilePath) { error = 'Select a file first'; return; }
 
     isConverting = true;
     error = '';
+    result = null;
     progress = 0;
+    progressMsg = 'Starting…';
+    savedToLibrary = false;
 
     try {
-      const af = (window as any).audioforge;
-
-      // Get output directory (media dir)
-      const mediaDir = await af.files.getMediaDir();
-
-      // Set up progress listener
-      if (unsubscribeProgress) {
-        unsubscribeProgress();
-      }
-      unsubscribeProgress = af.on('job:progress', (jobId: string, data: any) => {
-        if (data.progress !== undefined) {
-          progress = Math.min(100, data.progress);
-        }
-      });
-
-      // Call convert
-      const response = await af.audioToMidi.convert({
+      const outputDir = await af.files.getMediaDir();
+      const res = await af.audioToMidi.convert({
         inputPath: selectedFilePath,
-        outputDir: mediaDir,
+        outputDir,
         onsetThreshold,
-        minimumNoteLength: minNoteDuration * 1000, // Convert to ms
-        inferOnsets: true,
+        frameThreshold,
+        minimumNoteLength,
+        minimumFrequency: minFreq,
+        maximumFrequency: maxFreq,
       });
-
-      // Poll job status until complete
-      const jobId = response.jobId;
-      let jobComplete = false;
-      let attempts = 0;
-      const maxAttempts = 300; // 5 minutes with 1s interval
-
-      while (!jobComplete && attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        const status = await af.jobs.getStatus(jobId);
-        if (status.status === 'completed' && status.result) {
-          result = status.result;
-          jobComplete = true;
-          progress = 100;
-        } else if (status.status === 'failed') {
-          error = `Conversion failed: ${status.error || 'Unknown error'}`;
-          jobComplete = true;
-        }
-        attempts++;
-      }
-
-      if (!jobComplete) {
-        error = 'Conversion timed out';
-      }
-    } catch (e) {
-      error = `Conversion failed: ${e instanceof Error ? e.message : 'Unknown error'}`;
-    } finally {
+      convertJobId = res?.jobId ?? null;
+    } catch (e: any) {
       isConverting = false;
+      error = e?.message ?? 'Conversion failed';
     }
   }
 
-  async function saveMidiToLibrary() {
+  // ── Save to MIDI library ───────────────────────────────────────────────────
+  async function handleSave() {
     if (!result) return;
-
     try {
-      const af = (window as any).audioforge;
-      await af.audioToMidi.importMidi(result.midiPath);
-      // Success message could be shown via toast notification
-    } catch (e) {
-      error = `Failed to import MIDI: ${e instanceof Error ? e.message : 'Unknown error'}`;
+      await af.files.import([result.midiPath]);
+      savedToLibrary = true;
+    } catch (e: any) {
+      error = e?.message ?? 'Failed to save';
     }
   }
 
-  async function openInFinder() {
+  // ── Reveal in Finder ───────────────────────────────────────────────────────
+  function handleReveal() {
     if (!result) return;
-
-    try {
-      const af = (window as any).audioforge;
-      await af.koala.openInFinder(result.midiPath);
-    } catch (e) {
-      error = `Failed to open folder: ${e instanceof Error ? e.message : 'Unknown error'}`;
-    }
+    af.files.revealInFinder(result.midiPath);
   }
 
-  async function exportAs() {
+  // ── Export as ─────────────────────────────────────────────────────────────
+  async function handleExport() {
     if (!result) return;
-
     try {
-      const af = (window as any).audioforge;
-      const response = await af.files.showSaveDialog({
-        defaultPath: result.midiPath,
+      const res = await af.files.showSaveDialog({
+        defaultPath: result.midiPath.split('/').pop(),
         filters: [{ name: 'MIDI Files', extensions: ['mid'] }],
       });
-
-      if (response.filePath) {
-        // In a real implementation, we'd copy the file here
-        // For now, just show the path
-        console.log('Export to:', response.filePath);
-      }
-    } catch (e) {
-      error = `Failed to export: ${e instanceof Error ? e.message : 'Unknown error'}`;
+      if (res.canceled || !res.filePath) return;
+      // Read source and write to chosen path
+      const buf: ArrayBuffer = await af.files.readAsArrayBuffer(result.midiPath);
+      await af.files.writeFile(res.filePath, new Uint8Array(buf));
+    } catch (e: any) {
+      error = e?.message ?? 'Export failed';
     }
   }
 
-  function formatDuration(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = (seconds % 60).toFixed(2);
-    return `${mins}:${secs}`;
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function formatDuration(s: number): string {
+    const m = Math.floor(s / 60);
+    const sec = (s % 60).toFixed(1);
+    return `${m}:${sec.padStart(4, '0')}`;
   }
 
-  onDestroy(() => {
-    if (unsubscribeProgress) {
-      unsubscribeProgress();
-    }
-  });
+  function midiFileName(p: string) {
+    return p.split('/').pop() ?? p;
+  }
 </script>
 
-<div class="audio-to-midi-view">
-  <div class="panels">
-    <!-- Left Panel: File Picker & Settings -->
-    <div class="left-panel">
-      <div class="section">
-        <h3>Select Audio File</h3>
-        <Button on:click={selectFile} variant="primary">
-          {selectedFileName || 'Choose File'}
-        </Button>
-        {#if selectedFileName}
-          <p class="selected-file">{selectedFileName}</p>
-        {/if}
+<div class="view">
+  <!-- ── Left: file picker + settings ───────────────────────── -->
+  <div class="left-panel">
+
+    <!-- Install gate -->
+    <div class="install-card" class:installed={isInstalled}>
+      <div class="install-header">
+        <span class="install-label">Basic Pitch</span>
+        <span class="install-dot" class:ok={isInstalled}></span>
+        <span class="install-status">{isInstalled ? 'Ready' : 'Not installed'}</span>
       </div>
-
-      <div class="settings-section">
-        <h3>Settings</h3>
-
-        <div class="control-group">
-          <label for="onset-threshold">Onset Sensitivity</label>
-          <input
-            id="onset-threshold"
-            type="range"
-            min="0.1"
-            max="0.9"
-            step="0.1"
-            bind:value={onsetThreshold}
-            disabled={isConverting}
-          />
-          <span class="value">{onsetThreshold.toFixed(1)}</span>
-        </div>
-
-        <div class="control-group">
-          <label for="min-note-duration">Min Note Duration (s)</label>
-          <input
-            id="min-note-duration"
-            type="range"
-            min="0.05"
-            max="0.5"
-            step="0.05"
-            bind:value={minNoteDuration}
-            disabled={isConverting}
-          />
-          <span class="value">{minNoteDuration.toFixed(2)}</span>
-        </div>
-
-        <div class="checkbox-group">
-          <input
-            id="quantize-checkbox"
-            type="checkbox"
-            bind:checked={quantizeToGrid}
-            disabled={isConverting}
-          />
-          <label for="quantize-checkbox">Quantize to grid</label>
-        </div>
-
-        {#if quantizeToGrid}
-          <div class="control-group">
-            <label for="quantize-resolution">Quantize Resolution</label>
-            <select
-              id="quantize-resolution"
-              bind:value={quantizeResolution}
-              disabled={isConverting}
-            >
-              <option value="1/4">1/4</option>
-              <option value="1/8">1/8</option>
-              <option value="1/16">1/16</option>
-              <option value="1/32">1/32</option>
-            </select>
-          </div>
-        {/if}
-      </div>
-
-      <div class="action-section">
-        <Button
-          on:click={convertToMidi}
-          disabled={!selectedFileName || isConverting}
-          variant="primary"
+      {#if !isInstalled}
+        <button
+          class="install-btn"
+          onclick={handleInstall}
+          disabled={isInstalling}
         >
-          {isConverting ? 'Converting...' : 'Convert to MIDI'}
-        </Button>
-
-        {#if isConverting}
-          <div class="progress-container">
-            <div class="progress-bar">
-              <div class="progress-fill" style={`width: ${progress}%`}></div>
-            </div>
-            <span class="progress-text">{progress}%</span>
+          {isInstalling ? 'Installing…' : 'Install'}
+        </button>
+        {#if isInstalling}
+          <div class="mini-progress">
+            <div class="mini-fill" style="width:{progress}%"></div>
           </div>
         {/if}
+        {#if installError}
+          <div class="err-small">{installError}</div>
+        {/if}
+      {/if}
+    </div>
+
+    <!-- Source file -->
+    <div class="section-label">Source File</div>
+    <button class="browse-btn" onclick={handleBrowse} disabled={isConverting}>
+      Browse…
+    </button>
+
+    {#if selectedFilePath}
+      <div class="selected-pill" title={selectedFilePath}>
+        🎵 {selectedFileName}
+      </div>
+    {/if}
+
+    <div class="divider"></div>
+    <div class="section-label">From Library</div>
+
+    <div class="asset-list">
+      {#each libraryAssets as asset (asset.id)}
+        <button
+          class="asset-row"
+          class:active={asset.file_path === selectedFilePath}
+          onclick={() => selectAsset(asset)}
+          disabled={isConverting}
+        >
+          <span class="asset-name" title={asset.name}>{asset.name}</span>
+          {#if asset.bpm}
+            <span class="asset-bpm">{asset.bpm}</span>
+          {/if}
+        </button>
+      {:else}
+        <div class="empty-lib">Library is empty</div>
+      {/each}
+    </div>
+  </div>
+
+  <!-- ── Right: settings + output ───────────────────────────── -->
+  <div class="right-panel">
+
+    <!-- Settings -->
+    <div class="settings-card">
+      <div class="settings-title">Settings</div>
+
+      <div class="setting-row">
+        <label>Onset Sensitivity</label>
+        <div class="slider-row">
+          <input type="range" min="0.1" max="0.9" step="0.05"
+            bind:value={onsetThreshold} disabled={isConverting} />
+          <span class="val">{onsetThreshold.toFixed(2)}</span>
+        </div>
       </div>
 
-      {#if error}
-        <div class="error-message">{error}</div>
-      {/if}
+      <div class="setting-row">
+        <label>Frame Sensitivity</label>
+        <div class="slider-row">
+          <input type="range" min="0.1" max="0.9" step="0.05"
+            bind:value={frameThreshold} disabled={isConverting} />
+          <span class="val">{frameThreshold.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label>Min Note Length <span class="unit">ms</span></label>
+        <div class="slider-row">
+          <input type="range" min="10" max="200" step="5"
+            bind:value={minimumNoteLength} disabled={isConverting} />
+          <span class="val">{minimumNoteLength}</span>
+        </div>
+      </div>
+
+      <div class="setting-row two-col">
+        <div>
+          <label>Min Freq <span class="unit">Hz</span></label>
+          <input class="num-input" type="number" min="20" max="500" step="1"
+            bind:value={minFreq} disabled={isConverting} />
+        </div>
+        <div>
+          <label>Max Freq <span class="unit">Hz</span></label>
+          <input class="num-input" type="number" min="200" max="8000" step="1"
+            bind:value={maxFreq} disabled={isConverting} />
+        </div>
+      </div>
     </div>
 
-    <!-- Right Panel: Result Preview -->
-    <div class="right-panel">
-      {#if !result}
-        <div class="empty-state">
-          <p>Select an audio file to convert to MIDI</p>
-        </div>
+    <!-- Convert button + progress -->
+    <button
+      class="convert-btn"
+      onclick={handleConvert}
+      disabled={!isInstalled || !selectedFilePath || isConverting}
+    >
+      {#if isConverting}
+        <span class="spinner"></span> Converting…
       {:else}
-        <div class="result-card">
-          <h3>Conversion Result</h3>
-
-          <div class="result-info">
-            <div class="info-row">
-              <span class="label">File:</span>
-              <span class="value">{result.midiPath.split(/[/\\]/).pop()}</span>
-            </div>
-
-            <div class="info-row">
-              <span class="label">Notes Detected:</span>
-              <span class="value">{result.noteCount}</span>
-            </div>
-
-            <div class="info-row">
-              <span class="label">Duration:</span>
-              <span class="value">{formatDuration(result.durationSec)}</span>
-            </div>
-
-            {#if result.estimatedTempo}
-              <div class="info-row">
-                <span class="label">Detected BPM:</span>
-                <span class="value">{Math.round(result.estimatedTempo)} BPM</span>
-              </div>
-            {/if}
-          </div>
-
-          <div class="action-buttons">
-            <Button on:click={saveMidiToLibrary} variant="primary">
-              Save to MIDI Library
-            </Button>
-            <Button on:click={openInFinder} variant="secondary">
-              Open in Finder
-            </Button>
-            <Button on:click={exportAs} variant="secondary">
-              Export as...
-            </Button>
-          </div>
-        </div>
+        🎹 Convert to MIDI
       {/if}
-    </div>
+    </button>
+
+    {#if isConverting}
+      <div class="progress-wrap">
+        <div class="prog-bar">
+          <div class="prog-fill" style="width:{progress}%"></div>
+        </div>
+        <span class="prog-text">{progress}% {progressMsg}</span>
+      </div>
+    {/if}
+
+    {#if error}
+      <div class="error-banner">{error}</div>
+    {/if}
+
+    <!-- Result -->
+    {#if result}
+      <div class="result-card">
+        <div class="result-title">✓ Conversion Complete</div>
+
+        <div class="result-filename">{midiFileName(result.midiPath)}</div>
+
+        <div class="result-stats">
+          <div class="stat">
+            <span class="stat-label">Notes</span>
+            <span class="stat-value">{result.noteCount}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Duration</span>
+            <span class="stat-value">{formatDuration(result.durationSec)}</span>
+          </div>
+          {#if result.estimatedTempo}
+            <div class="stat">
+              <span class="stat-label">BPM</span>
+              <span class="stat-value">{Math.round(result.estimatedTempo)}</span>
+            </div>
+          {/if}
+        </div>
+
+        <div class="result-actions">
+          <button
+            class="action-btn primary"
+            onclick={handleSave}
+            disabled={savedToLibrary}
+          >
+            {savedToLibrary ? '✓ Saved to Library' : '+ Save to Library'}
+          </button>
+          <button class="action-btn" onclick={handleReveal}>
+            Show in Finder
+          </button>
+          <button class="action-btn" onclick={handleExport}>
+            Export as…
+          </button>
+        </div>
+      </div>
+    {:else if !isConverting && selectedFilePath && isInstalled}
+      <div class="idle-state">
+        <div class="idle-icon">🎹</div>
+        <p>Press <strong>Convert to MIDI</strong> to analyse this file.</p>
+        <p class="idle-note">
+          Basic Pitch detects pitched notes — works best on melodic
+          instruments. For drums, try lower onset sensitivity.
+        </p>
+      </div>
+    {:else if !selectedFilePath}
+      <div class="idle-state">
+        <div class="idle-icon">🎵</div>
+        <p>Select a file from your library or browse to get started.</p>
+      </div>
+    {/if}
   </div>
 </div>
 
 <style>
-  .audio-to-midi-view {
-    width: 100%;
+  .view {
+    display: flex;
     height: 100%;
-    padding: 16px;
-    background: rgba(255, 255, 255, 0.02);
-    overflow-y: auto;
+    overflow: hidden;
+    background: #0f0f1e;
   }
 
-  .panels {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    max-width: 1400px;
-    margin: 0 auto;
-  }
-
-  .left-panel,
-  .right-panel {
+  /* ── Left panel ─────────────────────────────────────────── */
+  .left-panel {
+    width: 240px;
+    flex-shrink: 0;
+    border-right: 1px solid rgba(255,255,255,0.08);
     display: flex;
     flex-direction: column;
-    gap: 20px;
-  }
-
-  .section,
-  .settings-section,
-  .action-section,
-  .result-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
     padding: 16px;
-  }
-
-  h3 {
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .selected-file {
-    margin: 8px 0 0 0;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
-    font-family: 'Monaco', monospace;
-    word-break: break-all;
-  }
-
-  .control-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-bottom: 16px;
-  }
-
-  .control-group label {
-    font-size: 12px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .control-group input[type='range'],
-  .control-group select {
-    padding: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 12px;
-  }
-
-  .control-group input[type='range'] {
-    cursor: pointer;
-  }
-
-  .control-group select {
-    cursor: pointer;
-  }
-
-  .control-group select:hover {
-    border-color: rgba(100, 181, 246, 0.5);
-  }
-
-  .control-group input[type='range']:disabled,
-  .control-group select:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .value {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
-    font-weight: 500;
-  }
-
-  .checkbox-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-
-  .checkbox-group input[type='checkbox'] {
-    cursor: pointer;
-  }
-
-  .checkbox-group label {
-    font-size: 13px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
-    cursor: pointer;
-  }
-
-  .progress-container {
-    margin-top: 12px;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .progress-bar {
-    flex: 1;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
+    gap: 10px;
     overflow: hidden;
   }
 
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #64b5f6, #42a5f5);
-    transition: width 0.3s ease;
-  }
-
-  .progress-text {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
-    min-width: 30px;
-    text-align: right;
-  }
-
-  .error-message {
-    padding: 12px;
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 4px;
-    color: #ef4444;
-    font-size: 12px;
-    margin-top: 8px;
-  }
-
-  .empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 300px;
-    color: rgba(255, 255, 255, 0.4);
-    text-align: center;
-  }
-
-  .empty-state p {
-    margin: 0;
-    font-size: 14px;
-  }
-
-  .result-info {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  .info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 13px;
-  }
-
-  .info-row .label {
-    color: rgba(255, 255, 255, 0.6);
-    font-weight: 500;
-  }
-
-  .info-row .value {
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 600;
-  }
-
-  .action-buttons {
+  .install-card {
+    padding: 10px 12px;
+    background: rgba(239,83,80,0.06);
+    border: 1px solid rgba(239,83,80,0.2);
+    border-radius: 7px;
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
-  .action-buttons :global(button) {
+  .install-card.installed {
+    background: rgba(129,199,132,0.06);
+    border-color: rgba(129,199,132,0.2);
+  }
+
+  .install-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+  }
+
+  .install-label { font-weight: 600; color: rgba(255,255,255,0.8); }
+
+  .install-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #ef5350;
+    flex-shrink: 0;
+  }
+  .install-dot.ok { background: #81c784; }
+
+  .install-status { color: rgba(255,255,255,0.45); font-size: 11px; }
+
+  .install-btn {
+    padding: 5px 10px;
+    background: #64b5f6;
+    border: none;
+    border-radius: 5px;
+    color: #000;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+  .install-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .mini-progress {
+    height: 3px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mini-fill {
+    height: 100%;
+    background: #64b5f6;
+    transition: width 0.3s;
+  }
+
+  .err-small { font-size: 11px; color: #ef5350; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+  }
+
+  .browse-btn {
+    padding: 7px 12px;
+    background: rgba(100,181,246,0.1);
+    border: 1px solid rgba(100,181,246,0.25);
+    border-radius: 6px;
+    color: #64b5f6;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .browse-btn:hover:not(:disabled) { background: rgba(100,181,246,0.18); }
+  .browse-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .selected-pill {
+    padding: 7px 10px;
+    background: rgba(100,181,246,0.08);
+    border: 1px solid rgba(100,181,246,0.2);
+    border-radius: 6px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'SF Mono','Fira Code',monospace;
+  }
+
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 2px 0;
+  }
+
+  .asset-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .asset-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 7px 10px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.12s;
     width: 100%;
   }
+  .asset-row:hover:not(:disabled) {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.08);
+  }
+  .asset-row.active {
+    background: rgba(100,181,246,0.1);
+    border-color: rgba(100,181,246,0.3);
+  }
+  .asset-row:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .asset-name {
+    font-size: 12px;
+    color: rgba(255,255,255,0.75);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+  .asset-bpm {
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    flex-shrink: 0;
+    font-family: 'SF Mono','Fira Code',monospace;
+  }
+  .empty-lib {
+    padding: 12px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+  }
+
+  /* ── Right panel ────────────────────────────────────────── */
+  .right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 24px;
+    overflow-y: auto;
+  }
+
+  .settings-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .settings-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+  }
+
+  .setting-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .setting-row label {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.65);
+  }
+
+  .unit { color: rgba(255,255,255,0.3); font-weight: 400; }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .slider-row input[type='range'] {
+    flex: 1;
+    cursor: pointer;
+    accent-color: #64b5f6;
+  }
+  .slider-row input:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .val {
+    font-size: 12px;
+    color: #64b5f6;
+    font-weight: 600;
+    min-width: 36px;
+    text-align: right;
+    font-family: 'SF Mono','Fira Code',monospace;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    flex-direction: unset;
+  }
+
+  .num-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px;
+    color: rgba(255,255,255,0.9);
+    font-size: 12px;
+    text-align: center;
+  }
+  .num-input:disabled { opacity: 0.4; }
+
+  /* ── Convert button ───────────────────────────────────────── */
+  .convert-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 0;
+    background: #64b5f6;
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .convert-btn:hover:not(:disabled) { background: #7fc3f8; }
+  .convert-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .progress-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .prog-bar {
+    height: 5px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .prog-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #64b5f6, #42a5f5);
+    transition: width 0.3s;
+  }
+  .prog-text {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+  }
+
+  .error-banner {
+    padding: 10px 14px;
+    background: rgba(239,83,80,0.1);
+    border: 1px solid rgba(239,83,80,0.3);
+    border-radius: 6px;
+    color: #ef5350;
+    font-size: 13px;
+  }
+
+  /* ── Result ───────────────────────────────────────────────── */
+  .result-card {
+    background: rgba(129,199,132,0.06);
+    border: 1px solid rgba(129,199,132,0.25);
+    border-radius: 8px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .result-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #81c784;
+  }
+
+  .result-filename {
+    font-size: 13px;
+    color: rgba(255,255,255,0.8);
+    font-family: 'SF Mono','Fira Code',monospace;
+    word-break: break-all;
+  }
+
+  .result-stats {
+    display: flex;
+    gap: 20px;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .stat-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+  }
+  .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .result-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    padding: 8px 14px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    color: rgba(255,255,255,0.8);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .action-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+  }
+  .action-btn.primary {
+    background: rgba(129,199,132,0.15);
+    border-color: rgba(129,199,132,0.35);
+    color: #81c784;
+  }
+  .action-btn.primary:hover:not(:disabled) {
+    background: rgba(129,199,132,0.22);
+  }
+  .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Idle states ──────────────────────────────────────────── */
+  .idle-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    color: rgba(255,255,255,0.4);
+    padding: 40px 24px;
+  }
+  .idle-icon { font-size: 36px; opacity: 0.5; }
+  .idle-state p { margin: 0; font-size: 14px; line-height: 1.6; }
+  .idle-state strong { color: rgba(255,255,255,0.6); }
+  .idle-note {
+    font-size: 12px !important;
+    color: rgba(255,255,255,0.3) !important;
+    max-width: 340px;
+  }
+
+  /* ── Spinner ──────────────────────────────────────────────── */
+  .spinner {
+    width: 13px; height: 13px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>

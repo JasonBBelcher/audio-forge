@@ -60,7 +60,9 @@ const api = {
     search: (query: string) => ipcRenderer.invoke('files:search', query),
     delete: (assetId: number) => ipcRenderer.invoke('files:delete', assetId),
     import: (filePaths: string[]) => ipcRenderer.invoke('files:import', filePaths),
+    scanFolder: (folderPath: string) => ipcRenderer.invoke('files:scanFolder', folderPath),
     analyzeAll: () => ipcRenderer.invoke('files:analyzeAll'),
+    revealInFinder: (filePath: string) => ipcRenderer.invoke('files:revealInFinder', filePath),
   },
   video: {
     getMetadata: (filePath: string) => ipcRenderer.invoke('video:getMetadata', filePath),
@@ -96,6 +98,7 @@ const api = {
     getAll: () => ipcRenderer.invoke('settings:getAll'),
   },
   health: {
+    getPlatform: () => ipcRenderer.invoke('health:getPlatform'),
     getStatus: () => ipcRenderer.invoke('health:getStatus'),
     installTool: (tool: string) => ipcRenderer.invoke('health:installTool', tool),
     onInstallProgress: (cb: (tool: string, line: string) => void) => {
@@ -285,6 +288,11 @@ const api = {
       ipcRenderer.invoke('loop:detect', filePath, bpm),
     extract: (filePath: string, loop: any, outputPath?: string) =>
       ipcRenderer.invoke('loop:extract', filePath, loop, outputPath),
+  },
+  mastering: {
+    analyze: (filePath: string) => ipcRenderer.invoke('mastering:analyze', filePath),
+    master: (params: object) => ipcRenderer.invoke('mastering:master', params),
+    showSaveDialog: (inputPath: string) => ipcRenderer.invoke('mastering:showSaveDialog', inputPath),
   },
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);

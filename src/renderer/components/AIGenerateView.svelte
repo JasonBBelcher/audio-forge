@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
   interface Generation {
     jobId: string;
@@ -50,10 +50,30 @@
     isInstalling = true;
     installError = '';
     try {
-      if (window.audioforge?.generation?.install) {
-        await window.audioforge.generation.install('stable-audio-open');
-        isModelInstalled = true;
+      if (!window.audioforge?.generation?.install) {
+        throw new Error('Install service not available');
       }
+      const { jobId } = await window.audioforge.generation.install('stable-audio-open');
+
+      // Wait for the install job to actually complete or fail
+      await new Promise<void>((resolve, reject) => {
+        const unsubComplete = window.audioforge.on('job:complete', (data: any) => {
+          if (data.jobId === jobId) {
+            unsubComplete();
+            unsubFailed();
+            resolve();
+          }
+        });
+        const unsubFailed = window.audioforge.on('job:failed', (data: any) => {
+          if (data.jobId === jobId) {
+            unsubComplete();
+            unsubFailed();
+            reject(new Error(data.error || 'Install failed'));
+          }
+        });
+      });
+
+      isModelInstalled = true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       installError = `Installation failed: ${msg}`;
@@ -84,12 +104,19 @@
         throw new Error('Generation service not available');
       }
 
+      // Get the media directory to save generated audio into
+      const outputDir = await window.audioforge.files.getMediaDir();
+      if (!outputDir) {
+        throw new Error('Could not determine output directory');
+      }
+
       const params: any = {
         modelId: 'stable-audio-open',
         prompt: prompt.trim(),
         durationSec,
         steps,
         guidance,
+        outputDir,
       };
 
       if (seed.trim()) {
@@ -121,7 +148,7 @@
       }
     });
 
-    const unsubComplete = window.audioforge.on('job:completed', (data: any) => {
+    const unsubComplete = window.audioforge.on('job:complete', (data: any) => {
       if (data.jobId === currentJobId) {
         generationProgress = 100;
         generationMessage = 'Complete!';
@@ -157,20 +184,89 @@
     };
   }
 
+  // ── Playback ────────────────────────────────────────────────────────────────
+  let playingJobId: string | null = null;
+  let isPaused = false;
+  let playCurrentTime = 0;
+  let playDuration = 0;
+  let audioEl: HTMLAudioElement | null = null;
+
+  function stopPlayback() {
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.src = '';
+      audioEl = null;
+    }
+    playingJobId = null;
+    isPaused = false;
+    playCurrentTime = 0;
+    playDuration = 0;
+  }
+
+  function handlePlayToggle(gen: Generation) {
+    // Pause/resume same track
+    if (playingJobId === gen.jobId && audioEl) {
+      if (audioEl.paused) {
+        audioEl.play().catch(console.error);
+        isPaused = false;
+      } else {
+        audioEl.pause();
+        isPaused = true;
+      }
+      return;
+    }
+
+    // Stop whatever was playing and start this one
+    stopPlayback();
+
+    const el = new Audio(`file://${gen.filePath}`);
+
+    el.addEventListener('loadedmetadata', () => {
+      playDuration = el.duration;
+    });
+
+    el.addEventListener('timeupdate', () => {
+      playCurrentTime = el.currentTime;
+    });
+
+    el.addEventListener('ended', () => {
+      playingJobId = null;
+      isPaused = false;
+      playCurrentTime = 0;
+      playDuration = 0;
+      audioEl = null;
+    });
+
+    el.play().catch(console.error);
+    audioEl = el;
+    playingJobId = gen.jobId;
+    isPaused = false;
+  }
+
+  function formatTime(sec: number): string {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  onDestroy(() => {
+    stopPlayback();
+  });
+
+  // ── Library save / delete ───────────────────────────────────────────────────
   async function handleSaveGeneration(generation: Generation) {
     try {
-      if (!window.audioforge?.library?.importAudio) {
+      if (!window.audioforge?.files?.import) {
         throw new Error('Library service not available');
       }
-
-      await window.audioforge.library.importAudio(generation.filePath, generation.prompt);
-      console.log('Generation saved to library');
+      await window.audioforge.files.import([generation.filePath]);
     } catch (error) {
       console.error('Failed to save generation:', error);
     }
   }
 
   async function handleDeleteGeneration(jobId: string) {
+    if (playingJobId === jobId) stopPlayback();
     generations = generations.filter(g => g.jobId !== jobId);
   }
 
@@ -310,17 +406,41 @@
       <h3>Recent Generations</h3>
       <div class="generations-list">
         {#each generations as gen (gen.jobId)}
-          <div class="generation-item">
+          {@const isThisPlaying = playingJobId === gen.jobId}
+          <div class="generation-item" class:is-playing={isThisPlaying}>
             <div class="gen-info">
               <div class="gen-header">
-                <span class="play-icon">▶</span>
+                <button
+                  class="play-toggle-btn"
+                  onclick={() => handlePlayToggle(gen)}
+                  title={isThisPlaying && !isPaused ? 'Pause' : 'Play'}
+                  aria-label={isThisPlaying && !isPaused ? 'Pause' : 'Play'}
+                >
+                  {isThisPlaying && !isPaused ? '⏸' : '▶'}
+                </button>
                 <span class="gen-filename">{formatPrompt(gen.prompt)}</span>
                 <span class="gen-time">{formatDate(gen.timestamp)}</span>
               </div>
-              <div class="gen-meta">
-                <span class="gen-duration">{gen.duration}s</span>
-              </div>
+
+              {#if isThisPlaying}
+                <div class="gen-playback">
+                  <div class="playback-bar-track">
+                    <div
+                      class="playback-bar-fill"
+                      style="width: {playDuration ? (playCurrentTime / playDuration) * 100 : 0}%"
+                    ></div>
+                  </div>
+                  <span class="playback-time">
+                    {formatTime(playCurrentTime)} / {formatTime(playDuration)}
+                  </span>
+                </div>
+              {:else}
+                <div class="gen-meta">
+                  <span class="gen-duration">{gen.duration}s</span>
+                </div>
+              {/if}
             </div>
+
             <div class="gen-actions">
               <button
                 class="action-btn save-btn"
@@ -647,9 +767,55 @@
     color: rgba(255, 255, 255, 0.85);
   }
 
-  .play-icon {
+  .play-toggle-btn {
+    background: none;
+    border: none;
     color: #64b5f6;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0.8;
+    transition: opacity 0.15s;
+  }
+
+  .play-toggle-btn:hover {
+    opacity: 1;
+  }
+
+  .gen-playback {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .playback-bar-track {
+    flex: 1;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .playback-bar-fill {
+    height: 100%;
+    background: #64b5f6;
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+
+  .playback-time {
     font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .generation-item.is-playing {
+    border-color: rgba(100, 181, 246, 0.35);
+    background: rgba(100, 181, 246, 0.05);
   }
 
   .gen-filename {

@@ -59,12 +59,56 @@ function buildReverseMap(): Map<string, string> {
 
 const REVERSE_CAMELOT_MAP = buildReverseMap();
 
+/**
+ * Normalize a key string from the audio analyzer's long format ("F minor", "C# major")
+ * into the short format used by CAMELOT_MAP ("Fm", "Db").
+ * Also handles already-short keys like "Am", "F#", etc.
+ */
+function normalizeKey(raw: string): string {
+  if (!raw) return raw;
+
+  // Already short form — return as-is if it's in the map
+  if (CAMELOT_MAP[raw]) return raw;
+
+  // Parse "Note major" / "Note minor" (case-insensitive)
+  const match = raw.trim().match(/^([A-Ga-g][#b]?)\s+(major|minor)$/i);
+  if (!match) return raw;
+
+  const note = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+  const isMinor = match[2].toLowerCase() === 'minor';
+
+  // Enharmonic corrections: map analyzer spellings → CAMELOT_MAP spellings
+  const MAJOR_ENHARMONIC: Record<string, string> = {
+    'C#': 'Db',
+    'G#': 'Ab',
+    'D#': 'Eb',
+    'A#': 'Bb',
+    'Gb': 'F#',
+  };
+  const MINOR_ENHARMONIC: Record<string, string> = {
+    'Eb': 'D#',
+    'Ab': 'G#',
+    'Db': 'C#',
+    'Gb': 'F#',
+    'Cb': 'B',
+  };
+
+  if (isMinor) {
+    const root = MINOR_ENHARMONIC[note] ?? note;
+    return `${root}m`;
+  } else {
+    const root = MAJOR_ENHARMONIC[note] ?? note;
+    return root;
+  }
+}
+
 export class CamelotService {
   /**
-   * Get the Camelot code for a given key
+   * Get the Camelot code for a given key.
+   * Accepts long form ("F minor") or short form ("Fm").
    */
   getCode(key: string): string | null {
-    const data = CAMELOT_MAP[key];
+    const data = CAMELOT_MAP[normalizeKey(key)];
     return data ? data.code : null;
   }
 
@@ -73,7 +117,7 @@ export class CamelotService {
    * Returns matches sorted by compatibility (perfect first)
    */
   getCompatibleKeys(key: string): HarmonicMatch[] {
-    const sourceData = CAMELOT_MAP[key];
+    const sourceData = CAMELOT_MAP[normalizeKey(key)];
     if (!sourceData) {
       return [];
     }

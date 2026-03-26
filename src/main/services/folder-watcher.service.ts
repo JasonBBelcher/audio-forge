@@ -31,7 +31,8 @@ export class FolderWatcherService {
       return;
     }
 
-    const watcher = watch(folderPath, { persistent: false }, (eventType, filename) => {
+    // recursive: true watches all subdirectories natively on macOS & Windows
+    const watcher = watch(folderPath, { persistent: false, recursive: true }, (eventType, filename) => {
       if (eventType !== 'rename' || !filename) return;
 
       const ext = extname(filename).toLowerCase();
@@ -39,7 +40,7 @@ export class FolderWatcherService {
 
       const fullPath = join(folderPath, filename);
 
-      // Debounce: wait 500ms for file to finish writing
+      // Debounce: wait 800ms for file to finish writing before importing
       setTimeout(async () => {
         if (!existsSync(fullPath)) return; // file was deleted, not added
 
@@ -47,9 +48,8 @@ export class FolderWatcherService {
           await this.processNewFile(fullPath);
         } catch (error) {
           console.error(`Error processing new file ${fullPath}:`, error);
-          // Continue processing other files even if one fails
         }
-      }, 500);
+      }, 800);
     });
 
     this.watchers.set(folderPath, watcher);
@@ -97,6 +97,15 @@ export class FolderWatcherService {
    * 3. Call the onFileAdded callback
    */
   private async processNewFile(filePath: string): Promise<void> {
+    // Skip if a file with the same name is already in the library
+    const filename = filePath.split('/').pop() ?? filePath;
+    const existing = this.fileService.listFiles();
+    const alreadyImported = existing.some((a) => {
+      const existingName = a.file_path.split('/').pop();
+      return existingName === filename;
+    });
+    if (alreadyImported) return;
+
     // Import the file into the library
     const asset = await this.fileService.importFile(filePath);
 

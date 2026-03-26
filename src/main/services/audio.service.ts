@@ -45,19 +45,97 @@ export class AudioService {
       throw new Error(`BPM analysis failed: ${result.stderr}`);
     }
 
-    const bpm = parseFloat(result.stdout.trim());
+    // aubio tempo outputs beat onset timestamps in seconds, one per line.
+    // Calculate BPM from the average interval between consecutive beats.
+    const lines = result.stdout.trim().split('\n').filter((l) => l.trim());
+    const timestamps = lines
+      .map((l) => parseFloat(l.trim().split(/\s+/)[0]))
+      .filter((n) => !isNaN(n) && n >= 0);
+
+    if (timestamps.length < 2) {
+      throw new Error('Not enough beats detected to calculate BPM');
+    }
+
+    const intervals: number[] = [];
+    for (let i = 1; i < timestamps.length; i++) {
+      const interval = timestamps[i] - timestamps[i - 1];
+      if (interval > 0) intervals.push(interval);
+    }
+
+    if (intervals.length === 0) {
+      throw new Error('No valid beat intervals found');
+    }
+
+    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    const bpm = Math.round(60 / avgInterval);
     return { bpm };
   }
 
   async analyzeKey(audioPath: string): Promise<{ key: string }> {
+    // aubio pitch outputs pitch estimates in Hz per frame.
+    // We use the Krumhansl-Schmuckler algorithm to determine musical key:
+    // build a chromagram from pitch values, then correlate with major/minor profiles.
     const result = await runProcess('aubio', ['pitch', audioPath], { timeout: 30000 });
 
     if (result.exitCode !== 0) {
       throw new Error(`Key analysis failed: ${result.stderr}`);
     }
 
-    const key = result.stdout.trim();
-    return { key };
+    const lines = result.stdout.trim().split('\n').filter((l) => l.trim());
+    const hzValues: number[] = [];
+
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      // aubio pitch may output "timestamp hz" or just "hz"
+      const hz = parseFloat(parts[parts.length - 1]);
+      if (!isNaN(hz) && hz > 20 && hz < 5000) {
+        hzValues.push(hz);
+      }
+    }
+
+    if (hzValues.length === 0) {
+      throw new Error('No valid pitch values detected');
+    }
+
+    // Krumhansl-Schmuckler key profiles (major and minor)
+    const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+    const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+    const NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+    // Build chromagram
+    const chroma = new Array(12).fill(0) as number[];
+    for (const hz of hzValues) {
+      const midi = 12 * Math.log2(hz / 440) + 69;
+      const semitone = ((Math.round(midi) % 12) + 12) % 12;
+      chroma[semitone]++;
+    }
+
+    // Normalize
+    const maxChroma = Math.max(...chroma);
+    const norm = chroma.map((v) => (maxChroma > 0 ? v / maxChroma : 0));
+
+    // Correlate with all 24 keys (12 major + 12 minor)
+    let bestKey = 'C major';
+    let bestScore = -Infinity;
+
+    for (let root = 0; root < 12; root++) {
+      let majorScore = 0;
+      let minorScore = 0;
+      for (let i = 0; i < 12; i++) {
+        majorScore += norm[(root + i) % 12] * MAJOR_PROFILE[i];
+        minorScore += norm[(root + i) % 12] * MINOR_PROFILE[i];
+      }
+      if (majorScore > bestScore) {
+        bestScore = majorScore;
+        bestKey = `${NOTE_NAMES[root]} major`;
+      }
+      if (minorScore > bestScore) {
+        bestScore = minorScore;
+        bestKey = `${NOTE_NAMES[root]} minor`;
+      }
+    }
+
+    return { key: bestKey };
   }
 
   async analyzeWaveform(audioPath: string): Promise<number[]> {

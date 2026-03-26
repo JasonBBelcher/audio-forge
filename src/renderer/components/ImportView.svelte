@@ -69,7 +69,7 @@
       return () => {};
     }
 
-    const unsubscribe = window.audioforge.on('job:completed', (data: any) => {
+    const unsubscribe = window.audioforge.on('job:complete', (data: any) => {
       const fileIndex = importedFiles.findIndex((f) => f.jobId === data.jobId);
       if (fileIndex !== -1) {
         importedFiles[fileIndex].status = 'completed';
@@ -113,6 +113,21 @@
 
     if (!result.canceled && result.filePaths.length > 0) {
       await handleFileSelection(result.filePaths);
+    }
+  }
+
+  async function handleBrowseFolder() {
+    const result = await window.audioforge.files.showOpenDialog({
+      properties: ['openDirectory'],
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      const folderPath = result.filePaths[0];
+      // Scan the folder recursively for audio files
+      const filePaths: string[] = await (window.audioforge.files as any).scanFolder(folderPath);
+      if (filePaths.length > 0) {
+        await handleFileSelection(filePaths);
+      }
     }
   }
 
@@ -175,20 +190,29 @@
             <path d="M12 2v10M2 12h10M12 22v-10M22 12h-10M6 6l12 12M18 6l-12 12" stroke-width="2" stroke-linecap="round" />
           </svg>
           <h3>Drop audio files here</h3>
-          <p>or click to browse</p>
+          <p>or choose files / folder below</p>
           <p class="formats">Supported: {SUPPORTED_FORMATS.join(', ')}</p>
         </div>
-        <button class="browse-btn" on:click={handleBrowseFiles} disabled={isAnalyzing}>
-          Browse Files...
-        </button>
+        <div class="browse-buttons">
+          <button class="browse-btn" on:click={handleBrowseFiles} disabled={isAnalyzing}>
+            Browse Files...
+          </button>
+          <button class="browse-btn folder-btn" on:click={handleBrowseFolder} disabled={isAnalyzing}>
+            📁 Import Folder...
+          </button>
+        </div>
       </div>
     {:else}
       <div class="imports-container">
         <div class="imports-header">
           <h3>Recent Imports</h3>
-          <button class="analyze-all-btn" on:click={handleAnalyzeAll} disabled={isAnalyzing}>
-            {isAnalyzing ? 'Analyzing...' : 'Analyze All Unanalyzed'}
-          </button>
+          <div class="header-actions">
+            <button class="browse-sm-btn" on:click={handleBrowseFiles} disabled={isAnalyzing}>+ Files</button>
+            <button class="browse-sm-btn" on:click={handleBrowseFolder} disabled={isAnalyzing}>📁 Folder</button>
+            <button class="analyze-all-btn" on:click={handleAnalyzeAll} disabled={isAnalyzing}>
+              {isAnalyzing ? 'Analyzing...' : 'Analyze All Unanalyzed'}
+            </button>
+          </div>
         </div>
 
         <div class="imports-list">

@@ -239,14 +239,14 @@ describe('WatchFoldersView', () => {
   });
 
   it('added folder appears in the list', async () => {
-    const mockWatch = vi.fn().mockResolvedValue({ watching: true, path: '/new/folder' });
+    const mockWatch = vi.fn().mockResolvedValue({ watching: true, path: '/Users/user/Music' });
     const mockShowDialog = vi.fn().mockResolvedValue({
       canceled: false,
-      filePaths: ['/new/folder'],
+      filePaths: ['/Users/user/Music'],
     });
     const mockGetFolders = vi.fn()
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(['/new/folder']);
+      .mockResolvedValueOnce(['/Users/user/Music']);
     const mockAf = {
       watcher: {
         watchFolder: mockWatch,
@@ -264,15 +264,16 @@ describe('WatchFoldersView', () => {
       expect(screen.getByText('No folders watched yet.')).toBeTruthy();
     });
 
-    const addBtn = screen.getByText(/Add Folder/);
-    await fireEvent.click(addBtn);
+    const addButtons = screen.getAllByText(/Add Folder/);
+    await fireEvent.click(addButtons[0]); // Click the button, not the help text
 
     await waitFor(() => {
       expect(mockWatch).toHaveBeenCalled();
     });
 
+    // Check for the formatted path (last 2 segments)
     await waitFor(() => {
-      expect(screen.getByText(/folder/)).toBeTruthy();
+      expect(screen.getByText(/user\/Music/)).toBeTruthy();
     });
   });
 

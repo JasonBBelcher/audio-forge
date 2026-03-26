@@ -54,6 +54,8 @@ import { CamelotService } from './services/camelot.service.js';
 import { registerHarmonicHandlers } from './ipc/harmonicHandlers.js';
 import { LoopDetectorService } from './services/loop-detector.service.js';
 import { registerLoopHandlers } from './ipc/loopHandlers.js';
+import { MasteringService } from './services/mastering.service.js';
+import { registerMasteringHandlers } from './ipc/masteringHandlers.js';
 import { SP404CompanionService } from './services/sp404-companion.service.js';
 import { registerSP404CompanionHandlers } from './ipc/sp404CompanionHandlers.js';
 import { SP404MidiService } from './services/sp404-midi.service.js';
@@ -91,6 +93,7 @@ modelRegistry.register(stableAudioAdapter);
 const generationService = new GenerationService(modelRegistry, fileService);
 const camelotService = new CamelotService();
 const loopDetectorService = new LoopDetectorService();
+const masteringService = new MasteringService();
 const sp404CompanionService = new SP404CompanionService(db, audioService);
 const sp404MidiService = new SP404MidiService();
 
@@ -115,6 +118,7 @@ registerGenerationHandlers(ipcMain, generationService, queueService);
 registerAudioToMidiHandlers(ipcMain, audioToMidiService, midiFilesService, queueService);
 registerHarmonicHandlers(ipcMain, camelotService);
 registerLoopHandlers(ipcMain, loopDetectorService);
+registerMasteringHandlers(ipcMain, masteringService, paths.media);
 registerSP404CompanionHandlers(ipcMain, sp404CompanionService, audioService, sp404Service, () => mainWindow?.webContents, sp404MidiService);
 registerSP404MidiHandlers(ipcMain, sp404MidiService, () => mainWindow?.webContents);
 // Note: registerWatcherHandlers and registerMidiHandlers are called in createWindow() after mainWindow is set
@@ -142,7 +146,7 @@ function createWindow(): void {
   });
 
   // Register watcher and MIDI handlers now that mainWindow exists
-  registerWatcherHandlers(ipcMain, folderWatcherService, mainWindow);
+  registerWatcherHandlers(ipcMain, folderWatcherService, settingsService, mainWindow);
   registerMidiHandlers(ipcMain, midiFilesService, mainWindow);
 
   if (process.env.NODE_ENV === 'development') {

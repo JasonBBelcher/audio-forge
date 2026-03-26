@@ -25,8 +25,10 @@
   import CollectionsView from './CollectionsView.svelte';
   import MidiLibraryView from './MidiLibraryView.svelte';
   import AIGenerateView from './AIGenerateView.svelte';
+  import WatchFoldersView from './WatchFoldersView.svelte';
   import AudioToMidiView from './AudioToMidiView.svelte';
   import LoopDetectorPanel from './LoopDetectorPanel.svelte';
+  import MasteringView from './MasteringView.svelte';
   import KoalaKitBuilder from './KoalaKitBuilder.svelte';
   import SP404KitBuilder from './SP404KitBuilder.svelte';
   import SP404CompanionView from './SP404CompanionView.svelte';
@@ -476,6 +478,10 @@
               <h2>🎹 Audio → MIDI</h2>
             {:else if activeView === 'loop-detect'}
               <h2>🔁 Loop Detect</h2>
+            {:else if activeView === 'watch-folders'}
+              <h2>👁 Watch Folders</h2>
+            {:else if activeView === 'mastering'}
+              <h2>🎚 Mastering</h2>
             {/if}
           </div>
           <div class="top-bar-right">
@@ -500,10 +506,14 @@
             <CollectionsView />
           {:else if activeView === 'ai-generate'}
             <AIGenerateView />
+          {:else if activeView === 'watch-folders'}
+            <WatchFoldersView />
           {:else if activeView === 'audio-to-midi'}
             <AudioToMidiView />
           {:else if activeView === 'loop-detect'}
             <LoopDetectorPanel filePath={selectedFilePath || ''} />
+          {:else if activeView === 'mastering'}
+            <MasteringView />
           {:else if activeView === 'koala'}
             <KoalaKitBuilder />
           {:else if activeView === 'sp404'}

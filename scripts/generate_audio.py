@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """
-Generate audio from text prompts using Stable Audio Open.
+Generate audio from text prompts using Stable Audio Open via HuggingFace diffusers.
 
-This script loads the Stable Audio Open model and generates audio based on text prompts.
-It supports optional parameters for seed, steps, and guidance scale.
+Uses stabilityai/stable-audio-open-1.0 through the diffusers StableAudioPipeline.
+Model weights (~3.3GB) are cached in ~/.cache/huggingface on first run.
 """
 
 import argparse
 import sys
 import os
 from pathlib import Path
-from typing import Optional
 
 try:
     import torch
-    import torchaudio
-    from einops import rearrange
-    from stable_audio_tools import get_pretrained_model
-    from stable_audio_tools.inference.generation import generate_diffusion_cond
+    import soundfile as sf
+    import numpy as np
+    from diffusers import StableAudioPipeline
 except ImportError as e:
     print(f"Error: Missing required package. {e}", file=sys.stderr)
-    print("Install with: pip install stable_audio_tools torchaudio torch einops", file=sys.stderr)
+    print("Install with: pip install diffusers transformers accelerate soundfile torch", file=sys.stderr)
     sys.exit(1)
 
 
@@ -40,93 +38,68 @@ def main():
         print(f"Error: Duration must be between 1 and 47 seconds, got {args.duration}", file=sys.stderr)
         sys.exit(1)
 
-    if args.steps < 20 or args.steps > 200:
-        print(f"Error: Steps must be between 20 and 200, got {args.steps}", file=sys.stderr)
-        sys.exit(1)
-
-    if args.guidance < 1 or args.guidance > 15:
-        print(f"Error: Guidance must be between 1 and 15, got {args.guidance}", file=sys.stderr)
-        sys.exit(1)
-
     # Ensure output directory exists
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Determine device
-        device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Using device: {device}")
-        print("Progress: 10%")
-
-        # Load model
-        print("Loading Stable Audio Open model...")
-        model, model_config = get_pretrained_model("stabilityai/stable-audio-open-1.0")
-        sample_rate = model_config["sample_rate"]
-        sample_size = model_config["sample_size"]
-
-        model = model.to(device)
-        model.eval()
-        print("Progress: 20%")
-
-        # Set seed if provided
-        if args.seed is not None:
-            torch.manual_seed(args.seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed(args.seed)
-
-        # Prepare conditioning
-        conditioning = [{
-            "prompt": args.prompt,
-            "seconds_start": 0,
-            "seconds_total": args.duration
-        }]
-
-        print(f"Generating audio: {args.prompt[:50]}...")
-        print("Progress: 30%")
-
-        # Generate audio
-        with torch.no_grad():
-            output = generate_diffusion_cond(
-                model,
-                steps=args.steps,
-                cfg_scale=args.guidance,
-                conditioning=conditioning,
-                sample_size=sample_size,
-                sigma_min=0.3,
-                sigma_max=500,
-                sampler_type="dpmpp-3m-sde",
-                device=device,
-            )
-
-        print("Progress: 80%")
-
-        # Rearrange output tensor
-        output = rearrange(output, "b d n -> d (b n)")
-
-        # Trim to exact duration
-        target_samples = int(sample_rate * args.duration)
-        if output.shape[1] > target_samples:
-            output = output[:, :target_samples]
-        elif output.shape[1] < target_samples:
-            # Pad if necessary
-            padding = target_samples - output.shape[1]
-            output = torch.nn.functional.pad(output, (0, padding))
-
-        # Normalize
-        output_abs_max = output.abs().max()
-        if output_abs_max > 0:
-            output_norm = output / output_abs_max
+        # Determine device — prefer MPS on Apple Silicon, then CUDA, then CPU
+        if torch.backends.mps.is_available():
+            device = "mps"
+        elif torch.cuda.is_available():
+            device = "cuda"
         else:
-            output_norm = output
+            device = "cpu"
 
-        # Convert to int16 range and float32
-        output_norm = output_norm.to(torch.float32).div(torch.iinfo(torch.int16).max)
+        print(f"Using device: {device}", flush=True)
+        print("Progress: 5%", flush=True)
 
-        # Save to file
-        torchaudio.save(str(output_path), output_norm.cpu(), sample_rate)
+        # Load pipeline (cached after first download)
+        print("Loading Stable Audio Open model (first run downloads ~3.3GB)...", flush=True)
+        pipe = StableAudioPipeline.from_pretrained(
+            "stabilityai/stable-audio-open-1.0",
+            torch_dtype=torch.float16 if device != "cpu" else torch.float32,
+        )
+        pipe = pipe.to(device)
+        print("Progress: 20%", flush=True)
 
-        print("Progress: 100%")
-        print(f"OUTPUT: {output_path.absolute()}")
+        # Set seed
+        generator = None
+        if args.seed is not None:
+            generator = torch.Generator(device=device).manual_seed(args.seed)
+
+        print(f"Generating: {args.prompt[:60]}...", flush=True)
+        print("Progress: 30%", flush=True)
+
+        # Run inference
+        audio = pipe(
+            args.prompt,
+            negative_prompt="low quality, average quality",
+            num_inference_steps=args.steps,
+            audio_end_in_s=args.duration,
+            num_waveforms_per_prompt=1,
+            generator=generator,
+            guidance_scale=args.guidance,
+        ).audios
+
+        print("Progress: 85%", flush=True)
+
+        # audio shape: (batch, channels, samples)
+        audio_np = audio[0].T  # (samples, channels)
+
+        # Get sample rate from pipeline config
+        sample_rate = pipe.vae.config.sampling_rate if hasattr(pipe.vae.config, 'sampling_rate') else 44100
+
+        # Normalize to [-1, 1]
+        max_val = np.abs(audio_np).max()
+        if max_val > 0:
+            audio_np = audio_np / max_val
+
+        # Save as WAV
+        sf.write(str(output_path), audio_np, sample_rate, subtype='PCM_16')
+
+        print("Progress: 100%", flush=True)
+        print(f"OUTPUT: {output_path.absolute()}", flush=True)
         sys.exit(0)
 
     except Exception as e:

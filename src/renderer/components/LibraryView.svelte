@@ -51,6 +51,34 @@
   let analyzeJobId: string | null = null;
   let unsubscribers: Array<() => void> = [];
 
+  // Debounced refresh — coalesces rapid job:complete events (batch imports)
+  let refreshPending = false;
+  async function scheduleRefresh(): Promise<void> {
+    if (refreshPending) return;
+    refreshPending = true;
+    // Yield to the current task, then flush — avoids setTimeout macro-task
+    // which can lose Svelte 5 reactivity tracking across async boundaries
+    await Promise.resolve();
+    refreshPending = false;
+    try {
+      const af = (window as any).audioforge;
+      const updated: Asset[] = await af.files.list();
+      // Spread to guarantee a new array reference — ensures Svelte detects the change
+      assets = [...updated];
+      // Add any new file types to the filter set (don't remove existing selections)
+      const newTypes = [...new Set(updated.map((a: Asset) => a.file_type))].sort();
+      const addedTypes = newTypes.filter((t: string) => !uniqueTypes.includes(t));
+      uniqueTypes = [...newTypes];
+      for (const t of addedTypes) filterTypes.add(t);
+      filterTypes = new Set(filterTypes);
+      uniqueKeys = [...new Set(updated.filter((a: Asset) => a.key).map((a: Asset) => a.key!))].sort();
+      applyFiltersAndSearch();
+      await loadPeaks(updated);
+    } catch (e) {
+      console.error('Failed to refresh assets:', e);
+    }
+  }
+
   // Stem Separation state
   let stemSeparationAsset: Asset | null = null;
   let showStemModal = false;
@@ -119,23 +147,14 @@
         await loadPeaks(assets);
       }
 
-      // Subscribe to library:fileAdded event to auto-refresh when new files are imported
+      // Auto-refresh on any event that changes asset data
       if (af?.on) {
-        const unsub = af.on('library:fileAdded', async () => {
-          try {
-            assets = await af.files.list();
-            uniqueTypes = [...new Set(assets.map(a => a.file_type))].sort();
-            filterTypes = new Set(uniqueTypes);
-            uniqueKeys = [...new Set(assets.filter(a => a.key).map(a => a.key!))].sort();
-            applyFiltersAndSearch();
-            if (assets.length > 0) {
-              await loadPeaks(assets);
-            }
-          } catch (e) {
-            console.error('Failed to refresh assets on file added:', e);
-          }
-        });
-        unsubscribers.push(unsub);
+        // New file imported → refresh
+        unsubscribers.push(af.on('library:fileAdded', scheduleRefresh));
+        // Analysis job finished → refresh so BPM/key/Camelot badges appear
+        unsubscribers.push(af.on('job:complete', scheduleRefresh));
+        // Failed job may have partial data — still refresh
+        unsubscribers.push(af.on('job:failed', scheduleRefresh));
       }
     } catch (e: any) {
       error = e?.message || 'Failed to load assets';
@@ -156,8 +175,9 @@
         return false;
       }
 
-      // Key filter
-      if (filterKey && asset.key !== filterKey) {
+      // Key filter — compare in short form so compatible-key buttons (short) match
+      // assets stored in long form ("A minor" vs "Am")
+      if (filterKey && formatKey(asset.key) !== formatKey(filterKey)) {
         return false;
       }
 
@@ -208,7 +228,7 @@
       return 0;
     });
 
-    filteredAssets = result;
+    filteredAssets = [...result];
   }
 
   function handleSearchInput(e: Event): void {
@@ -305,7 +325,11 @@
 
   function formatKey(key: string | undefined): string {
     if (!key) return '-';
-    return key;
+    // Convert long form ("F minor", "C# major") to short ("Fm", "C#")
+    const m = key.trim().match(/^([A-Ga-g][#b]?)\s+(major|minor)$/i);
+    if (!m) return key;
+    const note = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+    return m[2].toLowerCase() === 'minor' ? `${note}m` : note;
   }
 
   async function getCamelotCode(key: string): Promise<string> {
@@ -391,7 +415,7 @@
 
     try {
       const af = (window as any).audioforge;
-      await af.files?.deleteAsset?.(asset.id);
+      await af.files?.delete?.(asset.id);
 
       assets = assets.filter(a => a.id !== asset.id);
       applyFiltersAndSearch();
@@ -442,6 +466,32 @@
 
     showStemModal = false;
     stemSeparationAsset = null;
+  }
+
+  async function handleImport(): Promise<void> {
+    const af = (window as any).audioforge;
+    const result = await af.files?.showOpenDialog?.({
+      filters: [{ name: 'Audio Files', extensions: ['wav','mp3','flac','aiff','aif','ogg','m4a','aac'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (!result?.canceled && result?.filePaths?.length > 0) {
+      await af.files?.import?.(result.filePaths);
+      // Refresh library
+      assets = await af.files.list();
+      applyFiltersAndSearch();
+    }
+  }
+
+  async function handleDeleteAsset(asset: Asset): Promise<void> {
+    if (!confirm(`Remove "${asset.name}" from library?\n\n(The file itself will not be deleted from disk.)`)) return;
+    const af = (window as any).audioforge;
+    try {
+      await af.files?.delete?.(asset.id);
+      assets = assets.filter(a => a.id !== asset.id);
+      applyFiltersAndSearch();
+    } catch (e) {
+      console.error('Failed to delete asset:', e);
+    }
   }
 
   // Calculate unanalyzed count (missing BPM or Key)
@@ -525,7 +575,6 @@
   }
 
   onDestroy(() => {
-    // Clean up any remaining subscriptions
     unsubscribers.forEach(unsub => unsub());
   });
 </script>
@@ -546,7 +595,7 @@
     </div>
 
     <div class="toolbar-buttons">
-      <button class="import-btn">Import</button>
+      <button class="import-btn" onclick={handleImport}>Import</button>
       <button class="analyze-btn" disabled={analyzingAll} onclick={handleAnalyzeAll}>
         {#if analyzingAll}
           <span class="analyzing-spinner"></span>
@@ -680,6 +729,7 @@
               <th class="col-size" role="columnheader" onclick={() => handleColumnClick('file_size')}>
                 Size {getSortArrow('file_size')}
               </th>
+              <th class="col-actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -694,22 +744,37 @@
                 </td>
                 <td class="col-bpm">{formatBpm(asset.bpm)}</td>
                 <td class="col-key">
-                  <div class="key-cell">
-                    <span>{formatKey(asset.key)}</span>
-                    {#if asset.key}
-                      {#await getCamelotCode(asset.key) then camelotCode}
+                  {#if asset.key}
+                    {#await getCamelotCode(asset.key) then camelotCode}
+                      <div class="key-cell">
                         {#if camelotCode}
-                          <span class="camelot-badge">{camelotCode}</span>
+                          <span
+                            class="camelot-badge"
+                            class:camelot-minor={camelotCode.endsWith('A')}
+                            class:camelot-major={camelotCode.endsWith('B')}
+                          >{camelotCode}</span>
                         {/if}
-                      {/await}
-                    {/if}
-                  </div>
+                        <span class="key-text">{formatKey(asset.key)}</span>
+                      </div>
+                    {/await}
+                  {:else}
+                    <span class="key-empty">—</span>
+                  {/if}
                 </td>
                 <td class="col-duration">{formatDuration(asset.duration)}</td>
                 <td class="col-type">
                   <span class="type-badge">{asset.file_type}</span>
                 </td>
                 <td class="col-size">{formatSize(asset.file_size)}</td>
+                <td class="col-actions">
+                  <button
+                    class="delete-row-btn"
+                    type="button"
+                    title="Remove from library"
+                    onclick={(e) => { e.stopPropagation(); handleDeleteAsset(asset); }}
+                    aria-label="Delete {asset.name}"
+                  >×</button>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -1035,6 +1100,38 @@
     text-align: right;
   }
 
+  .col-actions {
+    width: 32px;
+    text-align: center;
+    padding: 0;
+  }
+
+  .delete-row-btn {
+    display: none;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: rgba(244, 67, 54, 0.15);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    border-radius: 3px;
+    color: #f44336;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .delete-row-btn:hover {
+    background: rgba(244, 67, 54, 0.35);
+    border-color: rgba(244, 67, 54, 0.6);
+  }
+
+  tr:hover .delete-row-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .type-badge {
     display: inline-block;
     padding: 2px 6px;
@@ -1049,21 +1146,45 @@
 
   .key-cell {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
+  }
+
+  .key-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.75);
+    white-space: nowrap;
+  }
+
+  .key-empty {
+    color: rgba(255, 255, 255, 0.25);
   }
 
   .camelot-badge {
     display: inline-block;
     padding: 2px 6px;
-    background: rgba(76, 175, 80, 0.2);
-    border: 1px solid rgba(76, 175, 80, 0.4);
-    border-radius: 3px;
-    color: #4caf50;
-    font-weight: 600;
-    font-size: 10px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 11px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
     letter-spacing: 0.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Minor keys — amber (A side of the wheel) */
+  .camelot-badge.camelot-minor {
+    background: rgba(255, 167, 38, 0.15);
+    border: 1px solid rgba(255, 167, 38, 0.45);
+    color: #ffa726;
+  }
+
+  /* Major keys — blue (B side of the wheel) */
+  .camelot-badge.camelot-major {
+    background: rgba(100, 181, 246, 0.15);
+    border: 1px solid rgba(100, 181, 246, 0.45);
+    color: #64b5f6;
   }
 
   .compatible-keys-section {

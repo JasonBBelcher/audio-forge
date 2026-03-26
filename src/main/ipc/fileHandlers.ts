@@ -1,7 +1,30 @@
 import type { IpcMain } from 'electron';
+import { shell } from 'electron';
+import { readdirSync, statSync } from 'fs';
+import { extname, join } from 'path';
 import type { FileService } from '../services/file.service.js';
 import type { AnalysisPipelineService } from '../services/analysis-pipeline.service.js';
 import type { QueueService } from '../services/queue.service.js';
+
+const AUDIO_EXTENSIONS = new Set(['.wav', '.mp3', '.flac', '.aiff', '.aif', '.ogg', '.m4a', '.aac']);
+
+function scanFolderRecursive(folderPath: string, results: string[] = []): string[] {
+  try {
+    const entries = readdirSync(folderPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue; // skip hidden files
+      const fullPath = join(folderPath, entry.name);
+      if (entry.isDirectory()) {
+        scanFolderRecursive(fullPath, results);
+      } else if (AUDIO_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+        results.push(fullPath);
+      }
+    }
+  } catch {
+    // Skip unreadable directories
+  }
+  return results;
+}
 
 export function registerFileHandlers(
   ipcMain: IpcMain,
@@ -54,6 +77,14 @@ export function registerFileHandlers(
 
   ipcMain.handle('files:delete', async (_event, assetId: number) => {
     return fileService.deleteAsset(assetId);
+  });
+
+  ipcMain.handle('files:scanFolder', (_event, folderPath: string) => {
+    return scanFolderRecursive(folderPath);
+  });
+
+  ipcMain.handle('files:revealInFinder', (_event, filePath: string) => {
+    shell.showItemInFolder(filePath);
   });
 
   ipcMain.handle('files:analyzeAll', async () => {

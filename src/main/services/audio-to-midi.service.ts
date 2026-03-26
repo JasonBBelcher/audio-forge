@@ -2,8 +2,9 @@ import { Midi } from '@tonejs/midi';
 import { homedir } from 'os';
 import { join } from 'path';
 import { basename, extname } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { runProcess, type RunProcessOptions } from '../utils/process-runner.js';
+import { detectPlatform, basicPitchModelSerialization } from '../utils/platform-detector.js';
 
 export interface AudioToMidiParams {
   inputPath: string;
@@ -14,7 +15,6 @@ export interface AudioToMidiParams {
   minimumFrequency?: number;  // Hz, default 32.7 (C1)
   maximumFrequency?: number;  // Hz, default 1975.5 (B6)
   inferOnsets?: boolean;      // default true
-  maxPolyphony?: number;      // default 88
 }
 
 export interface AudioToMidiResult {
@@ -25,117 +25,196 @@ export interface AudioToMidiResult {
 }
 
 export class AudioToMidiService {
-  private pythonPath: string;
-
-  constructor() {
-    // Path to python in the Claude venv
-    this.pythonPath = join(homedir(), '.claude', 'venv', 'bin', 'python');
-  }
+  // basic-pitch CLI lives in the audioforge venv
+  private readonly basicPitchBin = join(homedir(), '.audioforge-venv', 'bin', 'basic-pitch');
+  private readonly pipBin = join(homedir(), '.audioforge-venv', 'bin', 'pip');
+  private readonly pythonBin = join(homedir(), '.audioforge-venv', 'bin', 'python');
 
   /**
-   * Check if basic_pitch is installed in the venv
+   * Check if basic_pitch is installed — just verifies the CLI binary exists.
+   * Avoids spawning a Python subprocess (which can fail in Electron's env
+   * due to missing env vars even when the package is actually present).
    */
   async isInstalled(): Promise<boolean> {
-    try {
-      const result = await runProcess(this.pythonPath, [
-        '-c',
-        'import basic_pitch; print("OK")',
-      ]);
-      return result.exitCode === 0;
-    } catch {
-      return false;
-    }
+    return existsSync(this.basicPitchBin);
   }
 
   /**
-   * Install basic_pitch via pip
+   * Install basic_pitch with its ONNX extra so that onnxruntime is always
+   * installed alongside it. Calling this when already fully installed is safe
+   * — pip will report "Requirement already satisfied" and exit quickly.
+   *
+   * For NVIDIA GPUs we subsequently upgrade to onnxruntime-gpu so inference
+   * uses CUDA acceleration. On Apple Silicon / CPU-only machines the standard
+   * onnxruntime wheel (installed by the [onnx] extra) is sufficient.
    */
   async install(): Promise<void> {
-    const pipPath = join(homedir(), '.claude', 'venv', 'bin', 'pip');
-    const result = await runProcess(pipPath, ['install', 'basic_pitch']);
+    const venvDir = join(homedir(), '.audioforge-venv');
 
-    if (result.exitCode !== 0) {
-      throw new Error(`Installation failed: ${result.stderr}`);
+    // Create the venv from the system Python 3 if it doesn't exist yet.
+    if (!existsSync(join(venvDir, 'bin', 'python'))) {
+      const pythonCandidates = ['python3.12', 'python3.11', 'python3.10', 'python3', 'python'];
+      let created = false;
+      for (const py of pythonCandidates) {
+        const r = await runProcess(py, ['-m', 'venv', venvDir]);
+        if (r.exitCode === 0) { created = true; break; }
+      }
+      if (!created) {
+        throw new Error('Could not create Python virtual environment. Please install Python 3.10+.');
+      }
+    }
+
+    // Install basic-pitch with the [onnx] extra — this pulls in onnxruntime at
+    // the exact version basic-pitch requires, avoiding the TensorFlow add_slot
+    // conflict and the separate onnxruntime version mismatch.
+    const bpResult = await runProcess(this.pipBin, ['install', 'basic-pitch[onnx]']);
+    if (bpResult.exitCode !== 0) {
+      throw new Error(`basic-pitch[onnx] install failed: ${bpResult.stderr || bpResult.stdout}`);
+    }
+
+    // basic-pitch 0.3.x pins resampy<0.4.3 which uses pkg_resources — a module
+    // no longer bundled in Python 3.12+ venvs. Upgrade to 0.4.3+ which switched
+    // to importlib.metadata. The API is backward-compatible for our use.
+    const resampyResult = await runProcess(this.pipBin, ['install', '--upgrade', 'resampy>=0.4.3']);
+    if (resampyResult.exitCode !== 0) {
+      console.warn(`resampy upgrade failed: ${resampyResult.stderr}`);
+    }
+
+    // basic-pitch 0.3.x calls scipy.signal.gaussian which was removed in
+    // SciPy 1.12. Pin to the last compatible release.
+    const scipyResult = await runProcess(this.pipBin, ['install', 'scipy<1.12']);
+    if (scipyResult.exitCode !== 0) {
+      console.warn(`scipy downgrade failed: ${scipyResult.stderr}`);
+    }
+
+    // On NVIDIA GPU machines, upgrade to the CUDA-accelerated runtime.
+    const platform = detectPlatform();
+    if (platform.hasNvidiaGpu) {
+      const gpuResult = await runProcess(this.pipBin, ['install', '--upgrade', 'onnxruntime-gpu']);
+      if (gpuResult.exitCode !== 0) {
+        // Non-fatal — CPU onnxruntime will still work, just slower.
+        console.warn(`onnxruntime-gpu upgrade failed (will use CPU): ${gpuResult.stderr}`);
+      }
     }
   }
 
   /**
-   * Convert an audio file to MIDI using Basic Pitch.
-   * Spawns: python -m basic_pitch {outputDir} {inputPath} [options]
-   * Basic Pitch outputs a .mid file in outputDir named after the input file.
+   * Convert an audio file to MIDI using the basic-pitch CLI.
+   *
+   * basic-pitch creates a subdirectory named after the input file:
+   *   outputDir/{inputBasename}/{inputBasename}_basic_pitch.mid
    */
   async convert(params: AudioToMidiParams): Promise<AudioToMidiResult> {
-    // Validate input file exists
     if (!existsSync(params.inputPath)) {
       throw new Error('Input file does not exist');
     }
 
-    // Build command args
-    const args = ['basic_pitch', params.outputDir, params.inputPath];
+    const inputBasename = basename(params.inputPath, extname(params.inputPath));
 
-    // Add optional parameters
+    const platform = detectPlatform();
+    const modelSerialization = basicPitchModelSerialization(platform);
+
+    // Build CLI args — positional: output_dir audio_path
+    const args: string[] = [
+      '--save-midi',
+      '--model-serialization', modelSerialization,
+      '--no-melodia',
+    ];
+
     if (params.onsetThreshold !== undefined) {
       args.push('--onset-threshold', params.onsetThreshold.toString());
     }
-
     if (params.frameThreshold !== undefined) {
       args.push('--frame-threshold', params.frameThreshold.toString());
     }
-
     if (params.minimumNoteLength !== undefined) {
       args.push('--minimum-note-length', params.minimumNoteLength.toString());
     }
-
     if (params.minimumFrequency !== undefined) {
       args.push('--minimum-frequency', params.minimumFrequency.toString());
     }
-
     if (params.maximumFrequency !== undefined) {
       args.push('--maximum-frequency', params.maximumFrequency.toString());
     }
 
-    if (params.inferOnsets === false) {
-      args.push('--no-infer-onsets');
-    }
+    // Positional args at the end
+    args.push(params.outputDir, params.inputPath);
 
-    if (params.maxPolyphony !== undefined) {
-      args.push('--max-polyphony', params.maxPolyphony.toString());
-    }
-
-    // Spawn process with 30-minute timeout for conversion
-    const processOptions: RunProcessOptions = {
-      timeout: 1800000, // 30 minutes
-    };
-
-    const result = await runProcess(this.pythonPath, ['-m', ...args], processOptions);
+    const processOptions: RunProcessOptions = { timeout: 1800000 }; // 30 min
+    const result = await runProcess(this.basicPitchBin, args, processOptions);
 
     if (result.exitCode !== 0) {
-      throw new Error(`Audio to MIDI conversion failed: ${result.stderr}`);
+      throw new Error(`Conversion failed: ${result.stderr || result.stdout}`);
     }
 
-    // Determine output MIDI path
-    const inputBasename = basename(params.inputPath, extname(params.inputPath));
-    const midiPath = join(params.outputDir, `${inputBasename}_basic_pitch.mid`);
+    // basic-pitch output location varies by version:
+    //   v0.3+  → {outputDir}/{stem}/{stem}_basic_pitch.mid  (subdirectory)
+    //   older  → {outputDir}/{stem}_basic_pitch.mid          (flat)
+    // Search both, then fall back to a recursive scan so version differences
+    // and filenames with spaces never cause a false "not created" error.
+    const midiPath = this.findMidiOutput(params.outputDir, inputBasename);
+    if (!midiPath) {
+      throw new Error(
+        `basic-pitch ran successfully but produced no MIDI file under ${params.outputDir}. ` +
+        `stdout: ${result.stdout.slice(-500)}`
+      );
+    }
 
-    // Parse MIDI file to extract metadata
+    // Parse the MIDI to extract metadata
     const midiBuffer = readFileSync(midiPath);
     const midi = new Midi(midiBuffer);
 
-    // Count total notes across all tracks
     const noteCount = midi.tracks.reduce((sum, track) => sum + track.notes.length, 0);
-
-    // Get duration from MIDI
     const durationSec = midi.duration;
-
-    // Get estimated tempo
     const tempos = midi.header.tempos;
-    const estimatedTempo = tempos && tempos.length > 0 ? tempos[0].bpm : undefined;
+    const estimatedTempo = tempos?.length > 0 ? tempos[0].bpm : undefined;
 
-    return {
-      midiPath,
-      noteCount,
-      durationSec,
-      estimatedTempo,
-    };
+    return { midiPath, noteCount, durationSec, estimatedTempo };
+  }
+
+  /**
+   * Locate the MIDI file basic-pitch wrote for `stem` somewhere inside `dir`.
+   *
+   * Checks the two known layouts first (fast), then falls back to a full
+   * recursive scan so that version differences or exotic stems never cause a
+   * false "not created" error.
+   */
+  private findMidiOutput(dir: string, stem: string): string | undefined {
+    const suffix = '_basic_pitch.mid';
+
+    // Layout 1 — subdirectory (basic-pitch ≥ 0.3)
+    const withSubdir = join(dir, stem, `${stem}${suffix}`);
+    if (existsSync(withSubdir)) return withSubdir;
+
+    // Layout 2 — flat (older builds)
+    const flat = join(dir, `${stem}${suffix}`);
+    if (existsSync(flat)) return flat;
+
+    // Fallback — recursive scan for any file ending with _basic_pitch.mid
+    return this.scanForMidi(dir, suffix);
+  }
+
+  /** Recursively searches `dir` for the first file whose name ends with `suffix`. */
+  private scanForMidi(dir: string, suffix: string): string | undefined {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return undefined;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry);
+      try {
+        if (statSync(full).isDirectory()) {
+          const found = this.scanForMidi(full, suffix);
+          if (found) return found;
+        } else if (entry.endsWith(suffix)) {
+          return full;
+        }
+      } catch {
+        // skip unreadable entries
+      }
+    }
+    return undefined;
   }
 }

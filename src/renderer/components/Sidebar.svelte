@@ -23,6 +23,7 @@
         { id: 'library', label: 'Library', icon: '🗂' },
         { id: 'midi', label: 'MIDI Library', icon: '🎵' },
         { id: 'import', label: 'Import', icon: '⬇' },
+        { id: 'watch-folders', label: 'Watch Folders', icon: '👁' },
       ],
     },
     {
@@ -42,6 +43,7 @@
       items: [
         { id: 'audio-to-midi', label: 'Audio → MIDI', icon: '🎹' },
         { id: 'loop-detect', label: 'Loop Detect', icon: '🔁' },
+        { id: 'mastering', label: 'Mastering', icon: '🎚' },
       ],
     },
     {
