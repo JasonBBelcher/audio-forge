@@ -1,42 +1,52 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Readable } from 'stream';
-import path from 'path';
-import { AudioToMidiService, type AudioToMidiParams, type AudioToMidiResult } from '../audio-to-midi.service';
-
-// Mock runProcess before importing the service
-vi.mock('../../../main/utils/process-runner.js', () => ({
-  runProcess: vi.fn(),
-  getEnhancedEnv: vi.fn((extra) => ({ ...process.env, ...extra })),
-}));
-
-// Mock @tonejs/midi
-vi.mock('@tonejs/midi', () => ({
-  Midi: vi.fn().mockImplementation((buffer: Buffer) => ({
-    header: {
-      tempos: [{ bpm: 120 }],
-      timeSignatures: [{ timeSignature: [4, 4] }],
-      format: 0,
-    },
-    tracks: [
-      { notes: [{ midi: 60 }, { midi: 62 }, { midi: 64 }, { midi: 65 }] },
-    ],
-    duration: 10.5,
-  })),
-}));
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { AudioToMidiService, type AudioToMidiParams } from '../audio-to-midi.service';
+import { homedir } from 'os';
+import { join } from 'path';
 
 // Mock fs
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
   return {
     ...actual,
-    readFileSync: vi.fn((filePath: string) => {
-      return Buffer.from([0x4d, 0x54, 0x68, 0x64]); // MThd header
-    }),
-    existsSync: vi.fn((filePath: string) => true),
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+    readdirSync: vi.fn(),
+    statSync: vi.fn(),
   };
 });
 
-import { runProcess } from '../../../main/utils/process-runner';
+// Mock runProcess
+vi.mock('../../../main/utils/process-runner.js', () => ({
+  runProcess: vi.fn(),
+}));
+
+// Mock platform-detector
+vi.mock('../../../main/utils/platform-detector.js', () => ({
+  detectPlatform: vi.fn(() => ({
+    hasNvidiaGpu: false,
+  })),
+  basicPitchModelSerialization: vi.fn(() => 'onnx'),
+}));
+
+// Mock @tonejs/midi
+vi.mock('@tonejs/midi', () => ({
+  Midi: vi.fn().mockImplementation(() => ({
+    header: {
+      tempos: [{ bpm: 120 }],
+      timeSignatures: [{ timeSignature: [4, 4] }],
+      format: 0,
+    },
+    tracks: [
+      {
+        notes: [{ midi: 60 }, { midi: 62 }],
+      },
+    ],
+    duration: 5.0,
+  })),
+}));
+
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { runProcess } from '../../../main/utils/process-runner.js';
 
 describe('AudioToMidiService', () => {
   let service: AudioToMidiService;
@@ -46,284 +56,530 @@ describe('AudioToMidiService', () => {
     service = new AudioToMidiService();
   });
 
-  describe('isInstalled', () => {
-    it('should return true if basic_pitch is installed', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: '',
-        stderr: '',
-        exitCode: 0,
-      });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('isInstalled()', () => {
+    it('returns true when basicPitchBin file exists', async () => {
+      const expectedPath = join(homedir(), '.audioforge-venv', 'bin', 'basic-pitch');
+      (existsSync as any).mockReturnValue(true);
 
       const result = await service.isInstalled();
 
       expect(result).toBe(true);
-      const calls = mockRunProcess.mock.calls;
-      expect(calls[0][0]).toContain('python');
-      expect(calls[0][1]).toEqual(['-c', 'import basic_pitch; print("OK")']);
+      expect(existsSync).toHaveBeenCalledWith(expectedPath);
+      expect(existsSync).toHaveBeenCalledTimes(1);
     });
 
-    it('should return false if basic_pitch is not installed', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: '',
-        stderr: 'No module named basic_pitch',
-        exitCode: 1,
-      });
+    it('returns false when basicPitchBin file does not exist', async () => {
+      const expectedPath = join(homedir(), '.audioforge-venv', 'bin', 'basic-pitch');
+      (existsSync as any).mockReturnValue(false);
 
       const result = await service.isInstalled();
 
       expect(result).toBe(false);
+      expect(existsSync).toHaveBeenCalledWith(expectedPath);
+    });
+
+    it('does not call runProcess (pure file check)', async () => {
+      (existsSync as any).mockReturnValue(true);
+
+      await service.isInstalled();
+
+      expect(runProcess).not.toHaveBeenCalled();
     });
   });
 
-  describe('install', () => {
-    it('should spawn pip install basic_pitch', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Successfully installed basic_pitch',
-        stderr: '',
-        exitCode: 0,
-      });
+  describe('install()', () => {
+    it('skips venv creation if it already exists', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath);
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
       await service.install();
 
-      const calls = mockRunProcess.mock.calls;
-      expect(calls[0][0]).toContain('pip');
-      expect(calls[0][1]).toEqual(['install', 'basic_pitch']);
+      // Should call runProcess for basic-pitch, resampy, scipy packages (not for venv creation)
+      const calls = (runProcess as any).mock.calls;
+      const venvCall = calls.find((call: any[]) =>
+        call[1] && call[1].includes && call[1].includes('venv')
+      );
+      expect(venvCall).toBeUndefined();
     });
 
-    it('should throw error if pip install fails', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: '',
-        stderr: 'Error: Failed to install',
-        exitCode: 1,
+    it('creates venv and calls pip to install packages when venv does not exist', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+
+      (existsSync as any).mockReturnValue(false);
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await service.install();
+
+      // Should call runProcess for venv creation, basic-pitch, resampy, scipy
+      expect(runProcess).toHaveBeenCalled();
+
+      // Check that basic-pitch[onnx] was installed
+      const calls = (runProcess as any).mock.calls;
+      const basicPitchCall = calls.find((call: any[]) =>
+        call[1] && call[1].includes && call[1].includes('basic-pitch[onnx]')
+      );
+      expect(basicPitchCall).toBeDefined();
+    });
+
+    it('includes basic-pitch[onnx] in install args', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath ? false : false);
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await service.install();
+
+      const calls = (runProcess as any).mock.calls;
+      const basicPitchCall = calls.find((call: any[]) =>
+        call[1] && call[1].includes && call[1].includes('basic-pitch[onnx]')
+      );
+      expect(basicPitchCall).toBeDefined();
+      expect(basicPitchCall[1]).toContain('basic-pitch[onnx]');
+    });
+
+    it('includes scipy<1.12 constraint in install args', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath ? false : false);
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await service.install();
+
+      const calls = (runProcess as any).mock.calls;
+      const scipyCall = calls.find((call: any[]) =>
+        call[1] && call[1].includes && call[1].includes('scipy<1.12')
+      );
+      expect(scipyCall).toBeDefined();
+      expect(scipyCall[1]).toContain('scipy<1.12');
+    });
+
+    it('includes resampy upgrade with --upgrade flag', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath ? false : false);
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await service.install();
+
+      const calls = (runProcess as any).mock.calls;
+      const resampyCall = calls.find((call: any[]) => {
+        const args = call[1];
+        return args && Array.isArray(args) && args.includes('--upgrade') &&
+               args.some((arg: string) => arg.includes('resampy'));
+      });
+      expect(resampyCall).toBeDefined();
+      expect(resampyCall[1]).toContain('--upgrade');
+      expect(resampyCall[1].some((arg: string) => arg.includes('resampy'))).toBe(true);
+    });
+
+    it('rejects if basic-pitch[onnx] install exits non-zero', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath ? false : false);
+
+      (runProcess as any).mockImplementation((_bin: string, args: string[]) => {
+        if (args.includes('-m') && args.includes('venv')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+        if (args.includes('basic-pitch[onnx]')) {
+          return Promise.resolve({ exitCode: 1, stdout: '', stderr: 'Install failed' });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
       });
 
-      await expect(service.install()).rejects.toThrow('Installation failed');
+      await expect(service.install()).rejects.toThrow('basic-pitch[onnx] install failed');
+    });
+
+    it('does not throw if resampy upgrade fails (non-fatal)', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath ? false : false);
+
+      (runProcess as any).mockImplementation((_bin: string, args: string[]) => {
+        if (args.includes('-m') && args.includes('venv')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+        if (args.includes('basic-pitch[onnx]')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+        if (args.includes('resampy') && args.includes('--upgrade')) {
+          return Promise.resolve({ exitCode: 1, stdout: '', stderr: 'Resampy failed' });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      });
+
+      // Should not throw - resampy failure is non-fatal
+      await expect(service.install()).resolves.toBeUndefined();
+    });
+
+    it('does not throw if scipy downgrade fails (non-fatal)', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath ? false : false);
+
+      (runProcess as any).mockImplementation((_bin: string, args: string[]) => {
+        if (args.includes('-m') && args.includes('venv')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+        if (args.includes('basic-pitch[onnx]')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+        if (args.includes('resampy')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+        if (args.includes('scipy')) {
+          return Promise.resolve({ exitCode: 1, stdout: '', stderr: 'Scipy failed' });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      });
+
+      // Should not throw - scipy failure is non-fatal
+      await expect(service.install()).resolves.toBeUndefined();
+    });
+
+    it('upgrades onnxruntime-gpu on NVIDIA GPU systems', async () => {
+      const venvPythonPath = join(homedir(), '.audioforge-venv', 'bin', 'python');
+      (existsSync as any).mockImplementation((path: string) => path === venvPythonPath ? false : false);
+
+      const { detectPlatform } = await vi.importMock('../../../main/utils/platform-detector.js');
+      (detectPlatform as any).mockReturnValue({ hasNvidiaGpu: true });
+
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await service.install();
+
+      const calls = (runProcess as any).mock.calls;
+      const gpuCall = calls.find((call: any[]) =>
+        call[1] && call[1].includes && call[1].includes('onnxruntime-gpu')
+      );
+      expect(gpuCall).toBeDefined();
     });
   });
 
-  describe('convert', () => {
-    const defaultParams: AudioToMidiParams = {
-      inputPath: '/test/audio.wav',
-      outputDir: '/test/output',
-    };
-
-    it('should spawn python -m basic_pitch with input and output paths', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
-      });
-
-      const result = await service.convert(defaultParams);
-
-      expect(mockRunProcess).toHaveBeenCalledWith(
-        expect.stringContaining('python'),
-        expect.arrayContaining(['basic_pitch', '/test/output', '/test/audio.wav']),
-        expect.any(Object)
-      );
-      expect(result.midiPath).toBe('/test/output/audio_basic_pitch.mid');
+  describe('convert()', () => {
+    beforeEach(() => {
+      (existsSync as any).mockReturnValue(true);
+      (readFileSync as any).mockReturnValue(Buffer.from([]));
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
     });
 
-    it('should pass onset-threshold parameter when provided', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
-      });
+    it('spawns basic-pitch binary directly', async () => {
+      const expectedBin = join(homedir(), '.audioforge-venv', 'bin', 'basic-pitch');
 
       await service.convert({
-        ...defaultParams,
-        onsetThreshold: 0.7,
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
       });
 
-      expect(mockRunProcess).toHaveBeenCalledWith(
-        expect.stringContaining('python'),
-        expect.arrayContaining(['--onset-threshold', '0.7']),
+      expect(runProcess).toHaveBeenCalledWith(
+        expectedBin,
+        expect.any(Array),
         expect.any(Object)
       );
     });
 
-    it('should pass frame-threshold parameter when provided', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
-      });
-
+    it('includes --save-midi in args', async () => {
       await service.convert({
-        ...defaultParams,
-        frameThreshold: 0.4,
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
       });
 
-      expect(mockRunProcess).toHaveBeenCalledWith(
-        expect.stringContaining('python'),
-        expect.arrayContaining(['--frame-threshold', '0.4']),
-        expect.any(Object)
-      );
+      const args = (runProcess as any).mock.calls[0][1];
+      expect(args).toContain('--save-midi');
     });
 
-    it('should pass minimum-note-length parameter when provided', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
-      });
-
+    it('includes --model-serialization onnx in args', async () => {
       await service.convert({
-        ...defaultParams,
-        minimumNoteLength: 100,
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
       });
 
-      expect(mockRunProcess).toHaveBeenCalledWith(
-        expect.stringContaining('python'),
-        expect.arrayContaining(['--minimum-note-length', '100']),
-        expect.any(Object)
-      );
+      const args = (runProcess as any).mock.calls[0][1];
+      expect(args).toContain('--model-serialization');
+      const index = args.indexOf('--model-serialization');
+      expect(args[index + 1]).toBe('onnx');
     });
 
-    it('should include all optional parameters', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
-      });
-
+    it('includes --no-melodia flag in args', async () => {
       await service.convert({
-        inputPath: '/test/audio.wav',
-        outputDir: '/test/output',
-        onsetThreshold: 0.6,
-        frameThreshold: 0.35,
-        minimumNoteLength: 75,
-        minimumFrequency: 50,
-        maximumFrequency: 2000,
-        inferOnsets: false,
-        maxPolyphony: 64,
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
       });
 
-      const callArgs = mockRunProcess.mock.calls[0];
-      expect(callArgs[1]).toContain('--onset-threshold');
-      expect(callArgs[1]).toContain('0.6');
-      expect(callArgs[1]).toContain('--frame-threshold');
-      expect(callArgs[1]).toContain('0.35');
-      expect(callArgs[1]).toContain('--minimum-note-length');
-      expect(callArgs[1]).toContain('75');
-      expect(callArgs[1]).toContain('--minimum-frequency');
-      expect(callArgs[1]).toContain('50');
-      expect(callArgs[1]).toContain('--maximum-frequency');
-      expect(callArgs[1]).toContain('2000');
+      const args = (runProcess as any).mock.calls[0][1];
+      expect(args).toContain('--no-melodia');
     });
 
-    it('should return correct MIDI path based on input basename', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
+    it('passes outputDir and inputPath as positional args', async () => {
+      const inputPath = '/path/to/audio.wav';
+      const outputDir = '/output';
+
+      await service.convert({
+        inputPath,
+        outputDir,
+      });
+
+      const args = (runProcess as any).mock.calls[0][1];
+      expect(args[args.length - 2]).toBe(outputDir);
+      expect(args[args.length - 1]).toBe(inputPath);
+    });
+
+    it('returns midiPath with correct subdirectory pattern', async () => {
+      (existsSync as any).mockImplementation((path: string) => {
+        if (path === '/path/to/audio.wav') return true;
+        return path.includes('audio_basic_pitch.mid');
       });
 
       const result = await service.convert({
-        inputPath: '/path/to/mysong.mp3',
-        outputDir: '/out',
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
       });
 
-      expect(result.midiPath).toBe('/out/mysong_basic_pitch.mid');
+      expect(result.midiPath).toBe('/output/audio/audio_basic_pitch.mid');
     });
 
-    it('should parse noteCount from MIDI file', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
+    it('returns midiPath with correct flat pattern (older versions)', async () => {
+      (existsSync as any).mockImplementation((path: string) => {
+        if (path === '/path/to/audio.wav') return true;
+        if (path.includes('/output/audio/audio_basic_pitch.mid')) return false;
+        if (path === '/output/audio_basic_pitch.mid') return true;
+        return false;
       });
 
-      const result = await service.convert(defaultParams);
+      const result = await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+      });
 
-      expect(result.noteCount).toBe(4); // 4 notes in mocked MIDI
+      expect(result.midiPath).toBe('/output/audio_basic_pitch.mid');
     });
 
-    it('should parse durationSec from MIDI file', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
+    it('returns noteCount from mocked Midi (2 notes)', async () => {
+      const result = await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
       });
 
-      const result = await service.convert(defaultParams);
-
-      expect(result.durationSec).toBe(10.5);
+      expect(result.noteCount).toBe(2);
     });
 
-    it('should extract estimatedTempo from MIDI file', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
+    it('returns durationSec from mocked Midi (5.0)', async () => {
+      const result = await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
       });
 
-      const result = await service.convert(defaultParams);
+      expect(result.durationSec).toBe(5.0);
+    });
+
+    it('returns estimatedTempo from mocked Midi (120)', async () => {
+      const result = await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+      });
 
       expect(result.estimatedTempo).toBe(120);
     });
 
-    it('should throw error if conversion process fails with non-zero exit code', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: '',
-        stderr: 'Error processing audio',
+    it('rejects with error containing stderr when exit code is non-zero', async () => {
+      (runProcess as any).mockResolvedValue({
         exitCode: 1,
+        stdout: '',
+        stderr: 'Conversion error',
       });
 
-      await expect(service.convert(defaultParams)).rejects.toThrow(
-        'Audio to MIDI conversion failed'
-      );
-    });
-
-    it('should throw error if conversion process is rejected', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockRejectedValueOnce(new Error('Process error'));
-
-      await expect(service.convert(defaultParams)).rejects.toThrow('Process error');
-    });
-
-    it('should throw error if input file does not exist', async () => {
-      const { existsSync } = await import('fs');
-      const mockExistsSync = vi.mocked(existsSync);
-      mockExistsSync.mockReturnValueOnce(false);
-
-      await expect(service.convert(defaultParams)).rejects.toThrow(
-        'Input file does not exist'
-      );
-    });
-
-    it('should call runProcess with timeout option', async () => {
-      const mockRunProcess = vi.mocked(runProcess);
-      mockRunProcess.mockResolvedValueOnce({
-        stdout: 'Progress: 100% Done',
-        stderr: '',
-        exitCode: 0,
-      });
-
-      await service.convert(defaultParams);
-
-      expect(mockRunProcess).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Array),
-        expect.objectContaining({
-          timeout: expect.any(Number),
+      await expect(
+        service.convert({
+          inputPath: '/path/to/audio.wav',
+          outputDir: '/output',
         })
-      );
+      ).rejects.toThrow('Conversion failed: Conversion error');
+    });
+
+    it('rejects with error containing stdout if stderr is empty', async () => {
+      (runProcess as any).mockResolvedValue({
+        exitCode: 1,
+        stdout: 'Something went wrong',
+        stderr: '',
+      });
+
+      await expect(
+        service.convert({
+          inputPath: '/path/to/audio.wav',
+          outputDir: '/output',
+        })
+      ).rejects.toThrow('Conversion failed: Something went wrong');
+    });
+
+    it('passes --onset-threshold when provided', async () => {
+      await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+        onsetThreshold: 0.7,
+      });
+
+      const args = (runProcess as any).mock.calls[0][1];
+      const index = args.indexOf('--onset-threshold');
+      expect(index).toBeGreaterThan(-1);
+      expect(args[index + 1]).toBe('0.7');
+    });
+
+    it('passes --frame-threshold when provided', async () => {
+      await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+        frameThreshold: 0.4,
+      });
+
+      const args = (runProcess as any).mock.calls[0][1];
+      const index = args.indexOf('--frame-threshold');
+      expect(index).toBeGreaterThan(-1);
+      expect(args[index + 1]).toBe('0.4');
+    });
+
+    it('passes --minimum-note-length when provided', async () => {
+      await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+        minimumNoteLength: 100,
+      });
+
+      const args = (runProcess as any).mock.calls[0][1];
+      const index = args.indexOf('--minimum-note-length');
+      expect(index).toBeGreaterThan(-1);
+      expect(args[index + 1]).toBe('100');
+    });
+
+    it('passes --minimum-frequency when provided', async () => {
+      await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+        minimumFrequency: 50.0,
+      });
+
+      const args = (runProcess as any).mock.calls[0][1];
+      const index = args.indexOf('--minimum-frequency');
+      expect(index).toBeGreaterThan(-1);
+      expect(args[index + 1]).toBe('50');
+    });
+
+    it('passes --maximum-frequency when provided', async () => {
+      await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+        maximumFrequency: 2000.0,
+      });
+
+      const args = (runProcess as any).mock.calls[0][1];
+      const index = args.indexOf('--maximum-frequency');
+      expect(index).toBeGreaterThan(-1);
+      expect(args[index + 1]).toBe('2000');
+    });
+
+    it('does not pass optional params when not provided', async () => {
+      await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+      });
+
+      const args = (runProcess as any).mock.calls[0][1];
+      expect(args).not.toContain('--onset-threshold');
+      expect(args).not.toContain('--frame-threshold');
+      expect(args).not.toContain('--minimum-note-length');
+      expect(args).not.toContain('--minimum-frequency');
+      expect(args).not.toContain('--maximum-frequency');
+    });
+
+    it('throws error if input file does not exist', async () => {
+      (existsSync as any).mockReturnValue(false);
+
+      await expect(
+        service.convert({
+          inputPath: '/nonexistent/audio.wav',
+          outputDir: '/output',
+        })
+      ).rejects.toThrow('Input file does not exist');
+    });
+
+    it('throws error if MIDI output file is not found', async () => {
+      (existsSync as any).mockImplementation((path: string) => {
+        if (path === '/path/to/audio.wav') return true;
+        if (path.includes('_basic_pitch.mid')) return false;
+        // Return false for directory checks too
+        return false;
+      });
+
+      // Mock readdirSync to return empty arrays (no MIDI files found)
+      (readdirSync as any).mockReturnValue([]);
+
+      (runProcess as any).mockResolvedValue({ exitCode: 0, stdout: 'Process output', stderr: '' });
+
+      await expect(
+        service.convert({
+          inputPath: '/path/to/audio.wav',
+          outputDir: '/output',
+        })
+      ).rejects.toThrow(/basic-pitch ran successfully but produced no MIDI file/);
+    });
+
+    it('includes timeout in process options', async () => {
+      await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+      });
+
+      const options = (runProcess as any).mock.calls[0][2];
+      expect(options.timeout).toBe(1800000);
+    });
+
+    it('returns undefined for estimatedTempo when no tempos in header', async () => {
+      const { Midi } = await vi.importMock('@tonejs/midi');
+      (Midi as any).mockImplementation(() => ({
+        header: {
+          tempos: [],
+          timeSignatures: [{ timeSignature: [4, 4] }],
+          format: 0,
+        },
+        tracks: [
+          {
+            notes: [{ midi: 60 }],
+          },
+        ],
+        duration: 5.0,
+      }));
+
+      const result = await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+      });
+
+      expect(result.estimatedTempo).toBeUndefined();
+    });
+
+    it('sums note counts across multiple tracks', async () => {
+      const { Midi } = await vi.importMock('@tonejs/midi');
+      (Midi as any).mockImplementation(() => ({
+        header: {
+          tempos: [{ bpm: 120 }],
+          timeSignatures: [{ timeSignature: [4, 4] }],
+          format: 0,
+        },
+        tracks: [
+          {
+            notes: [{ midi: 60 }, { midi: 62 }],
+          },
+          {
+            notes: [{ midi: 64 }, { midi: 65 }, { midi: 67 }],
+          },
+        ],
+        duration: 5.0,
+      }));
+
+      const result = await service.convert({
+        inputPath: '/path/to/audio.wav',
+        outputDir: '/output',
+      });
+
+      expect(result.noteCount).toBe(5);
     });
   });
 });
