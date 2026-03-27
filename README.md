@@ -76,9 +76,24 @@ Most producers already own multiple tools that don't talk to each other. Your sa
 
 AudioForge installs and manages its own dependencies (ffmpeg, aubio, yt-dlp, demucs, basic-pitch). On first launch you'll see a health check that shows what's installed and what needs to be set up — one-click install for everything.
 
-- macOS (Apple Silicon or Intel), Windows 10+, or Linux
-- 4GB RAM minimum (8GB+ recommended for stem separation and AI generation)
-- ~3GB disk space for the app and models
+### Minimum (core features)
+Most features — library management, BPM/key detection, loop detection, Audio-to-MIDI, mastering, hardware kit building, YouTube import — run fine on modest hardware:
+
+- **OS**: macOS 10.15+, Windows 10, or Ubuntu 20.04+
+- **CPU**: Any modern dual-core (Intel Core i5 / AMD Ryzen 5 or equivalent)
+- **RAM**: 4GB
+- **Disk**: 2GB free for the app; additional space for your sample library
+- **GPU**: Not required for core features
+
+### Recommended (stem separation & AI generation)
+Stem separation (demucs) and AI audio generation (Stable Audio) are computationally intensive. They will run on CPU but can be very slow — a 3-minute track can take 10–20 minutes to separate on CPU alone.
+
+- **RAM**: 8GB+
+- **GPU (NVIDIA)**: Any CUDA-capable card with **4GB+ VRAM** (GTX 1060 6GB or better). 8GB VRAM recommended for Stable Audio generation.
+- **GPU (Apple Silicon)**: M1 or later — Metal acceleration is used automatically, making stem separation and generation practical even on base M1 chips.
+- **GPU (AMD)**: Not currently supported for GPU acceleration. AMD users will fall back to CPU.
+
+> **No GPU?** Everything still works — stem separation and AI generation just take longer. AudioForge detects your hardware on startup and adjusts accordingly. A progress bar keeps you informed while jobs run.
 
 ---
 
