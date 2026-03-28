@@ -40,19 +40,22 @@ export class AnalysisPipelineService {
       results.durationSec = durationOutcome.value;
     }
 
-    // Save results to database
+    // Save results and stamp analyzed_at so this asset is not re-queued
     this.fileService.updateAssetAnalysis(assetId, results);
+    this.fileService.markAnalyzed(assetId);
 
     return results;
   }
 
   async analyzeAll(): Promise<void> {
-    // Get all assets that don't have complete analysis
     const unanalyzed = this.fileService.listUnanalyzedAssets();
 
-    // Analyze each asset in parallel
-    await Promise.all(
-      unanalyzed.map((asset) => this.analyzeAsset(asset.id, asset.file_path))
-    );
+    // Process in batches of 3 to avoid overwhelming the system with subprocesses
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < unanalyzed.length; i += BATCH_SIZE) {
+      await Promise.allSettled(
+        unanalyzed.slice(i, i + BATCH_SIZE).map((asset) => this.analyzeAsset(asset.id, asset.file_path))
+      );
+    }
   }
 }

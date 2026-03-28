@@ -64,6 +64,10 @@ export class AudioToMidiService {
       }
     }
 
+    // setuptools must be present before anything else — pkg_resources (used by
+    // older resampy) lives there, and some build backends need it too.
+    await runProcess(this.pipBin, ['install', '--upgrade', 'setuptools', 'wheel']);
+
     // Install basic-pitch with the [onnx] extra — this pulls in onnxruntime at
     // the exact version basic-pitch requires, avoiding the TensorFlow add_slot
     // conflict and the separate onnxruntime version mismatch.
@@ -81,10 +85,13 @@ export class AudioToMidiService {
     }
 
     // basic-pitch 0.3.x calls scipy.signal.gaussian which was removed in
-    // SciPy 1.12. Pin to the last compatible release.
-    const scipyResult = await runProcess(this.pipBin, ['install', 'scipy<1.12']);
+    // SciPy 1.12. Force-reinstall the last compatible release so a previously
+    // installed newer version gets downgraded.
+    const scipyResult = await runProcess(this.pipBin, [
+      'install', '--force-reinstall', 'scipy==1.11.4',
+    ]);
     if (scipyResult.exitCode !== 0) {
-      console.warn(`scipy downgrade failed: ${scipyResult.stderr}`);
+      console.warn(`scipy pin failed: ${scipyResult.stderr}`);
     }
 
     // On NVIDIA GPU machines, upgrade to the CUDA-accelerated runtime.
