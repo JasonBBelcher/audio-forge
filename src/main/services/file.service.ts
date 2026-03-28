@@ -15,8 +15,11 @@ export interface Asset {
   bpm?: number;
   key?: string;
   role?: string;
+  source?: string;
   tags?: string[];
+  waveform_peaks?: number[];
   trashed_at?: string | null;
+  analyzed_at?: string | null;
   created_at: string;
 }
 
@@ -43,6 +46,9 @@ export class FileService {
   private readonly statsStmt: ReturnType<DatabaseConnection['prepare']>;
   private readonly updateAnalysisStmt: ReturnType<DatabaseConnection['prepare']>;
   private readonly listUnanalyzedStmt: ReturnType<DatabaseConnection['prepare']>;
+  private readonly updatePeaksStmt: ReturnType<DatabaseConnection['prepare']>;
+  private readonly findByPathStmt: ReturnType<DatabaseConnection['prepare']>;
+  private readonly markAnalyzedStmt: ReturnType<DatabaseConnection['prepare']>;
 
   constructor(
     private readonly db: DatabaseConnection,
@@ -50,8 +56,8 @@ export class FileService {
   ) {
     this.insertStmt = db.prepare(`
       INSERT INTO assets (
-        name, file_path, file_type, file_size, mime_type, role, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        name, file_path, file_type, file_size, mime_type, role, source, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
 
     this.listStmt = db.prepare('SELECT * FROM assets WHERE trashed_at IS NULL ORDER BY created_at DESC');
@@ -64,36 +70,46 @@ export class FileService {
       UPDATE assets SET bpm = COALESCE(?, bpm), key = COALESCE(?, key), duration = COALESCE(?, duration) WHERE id = ?
     `);
     this.listUnanalyzedStmt = db.prepare(`
-      SELECT * FROM assets WHERE trashed_at IS NULL AND (bpm IS NULL OR key IS NULL OR duration IS NULL) ORDER BY created_at DESC
+      SELECT * FROM assets WHERE trashed_at IS NULL AND analyzed_at IS NULL ORDER BY created_at DESC
     `);
+    this.updatePeaksStmt = db.prepare('UPDATE assets SET waveform_peaks = ? WHERE id = ?');
+    this.findByPathStmt = db.prepare('SELECT id FROM assets WHERE name = ? AND trashed_at IS NULL LIMIT 1');
+    this.markAnalyzedStmt = db.prepare('UPDATE assets SET analyzed_at = CURRENT_TIMESTAMP WHERE id = ?');
   }
 
-  async importFile(filePath: string): Promise<Asset> {
+  async importFile(filePath: string, options?: { source?: string; destDir?: string }): Promise<Asset> {
     const fileName = path.basename(filePath);
     const ext = path.extname(fileName).slice(1).toLowerCase();
     const mimeType = MIME_TYPES[ext] ?? 'application/octet-stream';
 
-    // Copy to media directory
-    const newPath = path.join(this.mediaDir, fileName);
+    // Copy to destination (media dir by default, or a source-specific subfolder)
+    const destDir = options?.destDir ?? this.mediaDir;
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    const newPath = path.join(destDir, fileName);
     fs.copyFileSync(filePath, newPath);
 
     const stat = fs.statSync(newPath);
 
-    const result = this.insertStmt.run(fileName, newPath, ext, stat.size, mimeType, null) as any;
+    const result = this.insertStmt.run(
+      fileName, newPath, ext, stat.size, mimeType, null, options?.source ?? null
+    ) as any;
     const assetId = (result.lastInsertRowid || result.changes) as number;
 
     const asset = this.getStmt.get(assetId) as any;
     return this.rowToAsset(asset);
   }
 
-  listFiles(options?: { includeTrash?: boolean }): Asset[] {
-    let query = 'SELECT * FROM assets';
-    if (!options?.includeTrash) {
-      query += ' WHERE trashed_at IS NULL';
-    }
-    query += ' ORDER BY created_at DESC';
+  listBySource(source: string): Asset[] {
+    const rows = this.db.prepare(
+      'SELECT * FROM assets WHERE trashed_at IS NULL AND source = ? ORDER BY created_at DESC'
+    ).all(source) as any[];
+    return rows.map((r) => this.rowToAsset(r));
+  }
 
-    const rows = this.db.prepare(query).all() as any[];
+  listFiles(options?: { includeTrash?: boolean }): Asset[] {
+    const rows = (options?.includeTrash
+      ? this.db.prepare('SELECT * FROM assets ORDER BY created_at DESC').all()
+      : this.listStmt.all()) as any[];
     return rows.map((r) => this.rowToAsset(r));
   }
 
@@ -144,6 +160,19 @@ export class FileService {
     this.updateAnalysisStmt.run(data.bpm ?? null, data.key ?? null, data.durationSec ?? null, id);
   }
 
+  findByFilePath(filePath: string): boolean {
+    const name = filePath.split('/').pop() ?? filePath;
+    return !!this.findByPathStmt.get(name);
+  }
+
+  updateWaveformPeaks(id: number, peaks: number[]): void {
+    this.updatePeaksStmt.run(JSON.stringify(peaks), id);
+  }
+
+  markAnalyzed(id: number): void {
+    this.markAnalyzedStmt.run(id);
+  }
+
   listUnanalyzedAssets(): Asset[] {
     const rows = this.listUnanalyzedStmt.all() as any[];
     return rows.map((r) => this.rowToAsset(r));
@@ -151,6 +180,7 @@ export class FileService {
 
   private rowToAsset(row: any): Asset {
     const tags = row.tags ? JSON.parse(row.tags) : undefined;
+    const waveform_peaks = row.waveform_peaks ? JSON.parse(row.waveform_peaks) : undefined;
     return {
       id: row.id,
       name: row.name,
@@ -165,7 +195,10 @@ export class FileService {
       key: row.key,
       role: row.role,
       tags,
+      waveform_peaks,
+      source: row.source ?? undefined,
       trashed_at: row.trashed_at,
+      analyzed_at: row.analyzed_at,
       created_at: row.created_at,
     };
   }

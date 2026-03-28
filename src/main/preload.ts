@@ -13,8 +13,8 @@ const api = {
   },
   youtube: {
     getInfo: (url: string) => ipcRenderer.invoke('youtube:getInfo', url),
-    download: (url: string, trackId: string, outputDir: string) =>
-      ipcRenderer.invoke('youtube:download', url, trackId, outputDir),
+    download: (url: string, trackId: string, outputDir: string, fileName?: string) =>
+      ipcRenderer.invoke('youtube:download', url, trackId, outputDir, fileName),
   },
   audio: {
     analyzeBPM: (filePath: string) => ipcRenderer.invoke('audio:analyzeBPM', filePath),
@@ -59,9 +59,13 @@ const api = {
     list: () => ipcRenderer.invoke('files:list'),
     search: (query: string) => ipcRenderer.invoke('files:search', query),
     delete: (assetId: number) => ipcRenderer.invoke('files:delete', assetId),
-    import: (filePaths: string[]) => ipcRenderer.invoke('files:import', filePaths),
+    import: (filePaths: string[], options?: { source?: string; destDir?: string }) =>
+      ipcRenderer.invoke('files:import', filePaths, options),
+    listBySource: (source: string) => ipcRenderer.invoke('files:listBySource', source),
+    getYoutubeDir: () => ipcRenderer.invoke('files:getYoutubeDir'),
     scanFolder: (folderPath: string) => ipcRenderer.invoke('files:scanFolder', folderPath),
     analyzeAll: () => ipcRenderer.invoke('files:analyzeAll'),
+    savePeaks: (assetId: number, peaks: number[]) => ipcRenderer.invoke('files:savePeaks', assetId, peaks),
     revealInFinder: (filePath: string) => ipcRenderer.invoke('files:revealInFinder', filePath),
   },
   video: {
@@ -91,6 +95,7 @@ const api = {
     list: (status?: string) => ipcRenderer.invoke('jobs:list', status),
     getStatus: (id: string) => ipcRenderer.invoke('jobs:getStatus', id),
     cancel: (id: string) => ipcRenderer.invoke('jobs:cancel', id),
+    retry: (id: string) => ipcRenderer.invoke('jobs:retry', id),
   },
   settings: {
     get: (key: string, defaultValue?: unknown) => ipcRenderer.invoke('settings:get', key, defaultValue),

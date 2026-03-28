@@ -88,7 +88,10 @@ const audioToMidiService = new AudioToMidiService();
 const analysisPipelineService = new AnalysisPipelineService(audioService, fileService);
 const folderWatcherService = new FolderWatcherService(fileService, analysisPipelineService);
 const modelRegistry = new ModelRegistry();
-const stableAudioAdapter = new StableAudioAdapter(path.join(__dirname, '../../scripts'));
+const stableAudioAdapter = new StableAudioAdapter(
+  path.join(__dirname, '../../scripts'),
+  () => settingsService.get<string>('hf.token') || undefined,
+);
 modelRegistry.register(stableAudioAdapter);
 const generationService = new GenerationService(modelRegistry, fileService);
 const camelotService = new CamelotService();
@@ -100,7 +103,7 @@ const sp404MidiService = new SP404MidiService();
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
 registerSettingsHandlers(ipcMain, settingsService);
-registerHealthHandlers(ipcMain, healthService, () => mainWindow?.webContents);
+registerHealthHandlers(ipcMain, healthService, () => mainWindow?.webContents, settingsService);
 registerJobHandlers(ipcMain, queueService);
 registerAudioHandlers(ipcMain, audioService);
 registerVideoHandlers(ipcMain, videoService);
@@ -167,9 +170,9 @@ ipcMain.handle('youtube:getInfo', async (_event, url: string) => {
   return youtubeService.getInfo(url);
 });
 
-ipcMain.handle('youtube:download', async (_event, url: string, trackId: string, outputDir: string) => {
+ipcMain.handle('youtube:download', async (_event, url: string, trackId: string, outputDir: string, fileName?: string) => {
   ensureDir(outputDir);
-  const jobId = queueService.enqueue('download-youtube', { url, trackId, outputDir });
+  const jobId = queueService.enqueue('download-youtube', { url, trackId, outputDir, fileName });
   return { jobId };
 });
 
@@ -191,6 +194,12 @@ ipcMain.handle('files:writeFile', async (_event, filePath: string, data: Uint8Ar
 
 ipcMain.handle('files:getMediaDir', () => {
   return getAppPaths().media;
+});
+
+ipcMain.handle('files:getYoutubeDir', () => {
+  const dir = getAppPaths().youtube;
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
 });
 
 ipcMain.handle('files:readAsArrayBuffer', async (_event, filePath: string) => {
@@ -217,13 +226,14 @@ function setupJobExecutor(window: BrowserWindow): void {
   // Create job handlers map with injected services
   const jobHandlers = new Map<string, any>([
     ['download-youtube', async (job: any, onProgress: Function, signal?: AbortSignal) => {
-      const { url, trackId, outputDir } = job.payload as {
-        url: string; trackId: string; outputDir: string;
+      const { url, trackId, fileName, outputDir } = job.payload as {
+        url: string; trackId: string; fileName?: string; outputDir: string;
       };
       ensureDir(outputDir as string);
 
       const result = await youtubeService.downloadWithProgress(url as string, outputDir as string, {
         trackId: trackId as string,
+        fileName: fileName as string | undefined,
         onProgress: (progress) => {
           onProgress(progress.percent, 'downloading');
           // Also emit youtube:progress for the modal's existing subscription
@@ -245,7 +255,7 @@ function setupJobExecutor(window: BrowserWindow): void {
       onProgress(10, 'analyzing BPM');
       const results = await analysisPipelineService.analyzeAsset(assetId, filePath);
       onProgress(100, 'completed');
-      return results;
+      return { ...results, assetId };
     }],
     ['analyze-audio-all', async (job: any, onProgress: Function) => {
       onProgress(10, 'starting batch analysis');
@@ -274,7 +284,8 @@ function setupJobExecutor(window: BrowserWindow): void {
       return { success: true };
     }],
     ['generate-audio', async (job: any, onProgress: Function) => {
-      const { modelId, prompt, durationSec, seed, steps, guidance, outputDir } = job.payload;
+      const { modelId, prompt, durationSec, seed, steps, guidance } = job.payload;
+      const outputDir: string = (job.payload.outputDir as string) || paths.media;
       ensureDir(outputDir);
       const result = await generationService.generate({
         modelId,

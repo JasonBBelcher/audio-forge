@@ -23,7 +23,7 @@
         { id: 'library', label: 'Library', icon: '🗂' },
         { id: 'midi', label: 'MIDI Library', icon: '🎵' },
         { id: 'import', label: 'Import', icon: '⬇' },
-        { id: 'watch-folders', label: 'Watch Folders', icon: '👁' },
+        { id: 'youtube', label: 'YouTube', icon: '▶' },
       ],
     },
     {
@@ -93,8 +93,8 @@
 <style>
   .sidebar {
     width: 200px;
-    background: #1a1a2e;
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -108,7 +108,7 @@
     flex-direction: column;
     gap: 0;
     padding: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--border);
   }
 
   .nav-group:last-child {
@@ -120,7 +120,7 @@
     font-weight: 700;
     letter-spacing: 0.8px;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-muted);
     padding: 12px 16px 8px 16px;
   }
 
@@ -138,7 +138,7 @@
     padding: 10px 16px;
     background: transparent;
     border: none;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -148,12 +148,12 @@
   }
 
   .nav-item:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+    background: var(--bg-card);
   }
 
   .nav-item.active {
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--text-primary);
     background: rgba(100, 181, 246, 0.1);
     border-left-color: #64b5f6;
   }

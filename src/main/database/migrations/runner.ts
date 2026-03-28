@@ -153,6 +153,32 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    name: '006_assets_perf',
+    up: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_assets_active ON assets(trashed_at, created_at);
+        ALTER TABLE assets ADD COLUMN waveform_peaks TEXT;
+      `);
+    },
+  },
+  {
+    name: '007_analyzed_at',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE assets ADD COLUMN analyzed_at DATETIME;
+      `);
+    },
+  },
+  {
+    name: '008_asset_source',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE assets ADD COLUMN source TEXT;
+        CREATE INDEX IF NOT EXISTS idx_assets_source ON assets(source, trashed_at);
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: DatabaseConnection): void {

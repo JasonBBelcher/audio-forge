@@ -36,13 +36,13 @@ export function registerFileHandlers(
   // files:getMediaDir, files:readAsArrayBuffer are registered in main.ts
   // where mainWindow and getAppPaths() are in scope.
 
-  ipcMain.handle('files:import', async (_event, filePaths: string[]) => {
+  ipcMain.handle('files:import', async (_event, filePaths: string[], options?: { source?: string; destDir?: string }) => {
     const results = [];
 
     for (const filePath of filePaths) {
       try {
         // 1. Add file to library
-        const asset = await fileService.importFile(filePath);
+        const asset = await fileService.importFile(filePath, options);
 
         // 2. Enqueue analysis job
         const jobId = queueService.enqueue('analyze-audio', {
@@ -71,6 +71,10 @@ export function registerFileHandlers(
     return fileService.listFiles();
   });
 
+  ipcMain.handle('files:listBySource', async (_event, source: string) => {
+    return fileService.listBySource(source);
+  });
+
   ipcMain.handle('files:search', async (_event, query: string) => {
     return fileService.searchFiles(query);
   });
@@ -85,6 +89,10 @@ export function registerFileHandlers(
 
   ipcMain.handle('files:revealInFinder', (_event, filePath: string) => {
     shell.showItemInFolder(filePath);
+  });
+
+  ipcMain.handle('files:savePeaks', (_event, assetId: number, peaks: number[]) => {
+    fileService.updateWaveformPeaks(assetId, peaks);
   });
 
   ipcMain.handle('files:analyzeAll', async () => {

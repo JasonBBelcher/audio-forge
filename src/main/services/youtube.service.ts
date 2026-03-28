@@ -109,21 +109,37 @@ export class YouTubeService {
    * Download audio from YouTube with progress callback support and AbortSignal.
    * Streams progress updates and can be cancelled via AbortController.
    */
+  /**
+   * Sanitize a string for use as a filesystem filename.
+   * Removes characters that are illegal on common platforms.
+   */
+  sanitizeFileName(name: string): string {
+    return name
+      .replace(/[/\\:*?"<>|]/g, '_') // illegal chars on Windows/macOS/Linux
+      .replace(/\s+/g, ' ')           // collapse whitespace
+      .replace(/^\.+/, '')            // no leading dots
+      .trim()
+      .slice(0, 200);                 // cap length
+  }
+
   async downloadWithProgress(
     url: string,
     outputDir: string,
     options: {
       trackId: string;
+      fileName?: string;
       onProgress: (progress: { percent: number; speed?: string; eta?: string }) => void;
       signal?: AbortSignal;
     }
   ): Promise<{ filePath: string }> {
     return new Promise((resolve, reject) => {
-      const { trackId, onProgress, signal } = options;
+      const { trackId, fileName, onProgress, signal } = options;
       this.validateUrl(url);
 
+      // Use sanitized video title as filename when available, fall back to trackId
+      const baseName = fileName ? this.sanitizeFileName(fileName) : trackId;
       // Build yt-dlp args
-      const outputTemplate = path.join(outputDir, `${trackId}.%(ext)s`);
+      const outputTemplate = path.join(outputDir, `${baseName}.%(ext)s`);
       const args = [
         '-x',
         '--audio-format', 'wav',

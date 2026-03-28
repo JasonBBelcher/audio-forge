@@ -13,6 +13,7 @@
     key?: string;
     duration?: number;
     tags?: string[];
+    analyzed_at?: string | null;
     created_at?: string;
   }
 
@@ -36,14 +37,17 @@
   let filterBpmMin = 0;
   let filterBpmMax = 300;
   let filterKey = '';
+  let filterSource = ''; // '' = all, 'youtube' = YouTube only
 
   // UI state
   let contextMenu: { asset: Asset; x: number; y: number } | null = null;
   let uniqueTypes: string[] = [];
   let uniqueKeys: string[] = [];
 
-  // Waveform peaks cache
+  // Waveform peaks cache (populated from DB-cached peaks or lazily computed)
   let peaksCache = new Map<number, number[]>();
+  let peaksComputeQueue: Asset[] = [];
+  let peaksComputeRunning = false;
 
   // Analyze All state
   let analyzingAll = false;
@@ -51,32 +55,40 @@
   let analyzeJobId: string | null = null;
   let unsubscribers: Array<() => void> = [];
 
-  // Debounced refresh — coalesces rapid job:complete events (batch imports)
-  let refreshPending = false;
-  async function scheduleRefresh(): Promise<void> {
-    if (refreshPending) return;
-    refreshPending = true;
-    // Yield to the current task, then flush — avoids setTimeout macro-task
-    // which can lose Svelte 5 reactivity tracking across async boundaries
-    await Promise.resolve();
-    refreshPending = false;
-    try {
-      const af = (window as any).audioforge;
-      const updated: Asset[] = await af.files.list();
-      // Spread to guarantee a new array reference — ensures Svelte detects the change
-      assets = [...updated];
-      // Add any new file types to the filter set (don't remove existing selections)
-      const newTypes = [...new Set(updated.map((a: Asset) => a.file_type))].sort();
-      const addedTypes = newTypes.filter((t: string) => !uniqueTypes.includes(t));
-      uniqueTypes = [...newTypes];
-      for (const t of addedTypes) filterTypes.add(t);
-      filterTypes = new Set(filterTypes);
-      uniqueKeys = [...new Set(updated.filter((a: Asset) => a.key).map((a: Asset) => a.key!))].sort();
-      applyFiltersAndSearch();
-      await loadPeaks(updated);
-    } catch (e) {
-      console.error('Failed to refresh assets:', e);
+  // Targeted update: patch a single asset in-place when a job completes
+  function patchAsset(assetId: number, data: { bpm?: number; key?: string; duration?: number }): void {
+    const idx = assets.findIndex((a) => a.id === assetId);
+    if (idx === -1) return;
+    assets[idx] = { ...assets[idx], ...data, analyzed_at: assets[idx].analyzed_at ?? new Date().toISOString() };
+    assets = [...assets];
+    if (data.key) {
+      uniqueKeys = [...new Set(assets.filter((a) => a.key).map((a) => a.key!))].sort();
     }
+    applyFiltersAndSearch();
+  }
+
+  // Debounced full refresh — only used for new files added (not analysis completions)
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleFullRefresh(): void {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(async () => {
+      refreshTimer = null;
+      try {
+        const af = (window as any).audioforge;
+        const updated: Asset[] = await af.files.list();
+        assets = [...updated];
+        const newTypes = [...new Set(updated.map((a: Asset) => a.file_type))].sort();
+        const addedTypes = newTypes.filter((t: string) => !uniqueTypes.includes(t));
+        uniqueTypes = [...newTypes];
+        for (const t of addedTypes) filterTypes.add(t);
+        filterTypes = new Set(filterTypes);
+        uniqueKeys = [...new Set(updated.filter((a: Asset) => a.key).map((a: Asset) => a.key!))].sort();
+        applyFiltersAndSearch();
+        enqueuePeaks(updated);
+      } catch (e) {
+        console.error('Failed to refresh assets:', e);
+      }
+    }, 500);
   }
 
   // Stem Separation state
@@ -98,26 +110,55 @@
     });
   }
 
-  async function loadPeaks(assetsToLoad: Asset[]): Promise<void> {
-    for (let i = 0; i < assetsToLoad.length; i += 5) {
-      const batch = assetsToLoad.slice(i, i + 5);
-      await Promise.all(batch.map(async (asset) => {
-        if (peaksCache.has(asset.id)) return;
-        try {
-          const af = (window as any).audioforge;
-          const result = await af.audio?.analyzeWaveform(asset.file_path);
-          // analyzeWaveform may return { peaks: number[] } or number[] — handle both
-          const raw: number[] = Array.isArray(result) ? result : (result?.peaks ?? []);
-          // Downsample to 80 points max
-          peaksCache.set(asset.id, downsample(raw, 80));
-          peaksCache = new Map(peaksCache); // trigger Svelte reactivity
-        } catch (e) {
-          // On error, store empty array
-          peaksCache.set(asset.id, []);
-          peaksCache = new Map(peaksCache);
-        }
-      }));
+  // Seed the peaks cache from DB-stored values and queue any missing ones for lazy computation
+  function enqueuePeaks(assetsToLoad: Asset[]): void {
+    const missing: Asset[] = [];
+    for (const asset of assetsToLoad) {
+      if (peaksCache.has(asset.id)) continue;
+      if (asset.waveform_peaks && asset.waveform_peaks.length > 0) {
+        peaksCache.set(asset.id, asset.waveform_peaks);
+      } else {
+        missing.push(asset);
+      }
     }
+    if (missing.length > 0) {
+      peaksCache = new Map(peaksCache); // flush DB-cached peaks to UI immediately
+      peaksComputeQueue.push(...missing);
+      if (!peaksComputeRunning) drainPeaksQueue();
+    } else if (assetsToLoad.some((a) => a.waveform_peaks)) {
+      peaksCache = new Map(peaksCache);
+    }
+  }
+
+  // Process the peaks queue one-at-a-time in the background, saving results to DB.
+  // Reactivity is flushed in batches to avoid re-rendering the list after every single file.
+  async function drainPeaksQueue(): Promise<void> {
+    peaksComputeRunning = true;
+    const af = (window as any).audioforge;
+    let pendingFlush = 0;
+    while (peaksComputeQueue.length > 0) {
+      const asset = peaksComputeQueue.shift()!;
+      if (peaksCache.has(asset.id)) continue;
+      try {
+        const result = await af.audio?.analyzeWaveform(asset.file_path);
+        const raw: number[] = Array.isArray(result) ? result : (result?.peaks ?? []);
+        const peaks = downsample(raw, 80);
+        peaksCache.set(asset.id, peaks);
+        if (peaks.length > 0) {
+          af.files.savePeaks(asset.id, peaks).catch(() => {});
+        }
+      } catch {
+        peaksCache.set(asset.id, []);
+      }
+      // Flush reactivity every 10 peaks to avoid re-rendering on every file
+      pendingFlush++;
+      if (pendingFlush >= 10) {
+        peaksCache = new Map(peaksCache);
+        pendingFlush = 0;
+      }
+    }
+    if (pendingFlush > 0) peaksCache = new Map(peaksCache);
+    peaksComputeRunning = false;
   }
 
   onMount(async () => {
@@ -142,19 +183,35 @@
 
       applyFiltersAndSearch();
 
-      // Load waveform peaks in batches
+      // Seed peaks cache from DB values, queue missing ones for lazy background computation
       if (assets.length > 0) {
-        await loadPeaks(assets);
+        enqueuePeaks(assets);
       }
 
-      // Auto-refresh on any event that changes asset data
       if (af?.on) {
-        // New file imported → refresh
-        unsubscribers.push(af.on('library:fileAdded', scheduleRefresh));
-        // Analysis job finished → refresh so BPM/key/Camelot badges appear
-        unsubscribers.push(af.on('job:complete', scheduleRefresh));
-        // Failed job may have partial data — still refresh
-        unsubscribers.push(af.on('job:failed', scheduleRefresh));
+        // New file imported by watcher → append directly, no full refresh needed
+        unsubscribers.push(af.on('library:fileAdded', (data: any) => {
+          const asset: Asset = data.asset;
+          if (!asset || assets.some((a) => a.id === asset.id)) return;
+          assets = [asset, ...assets];
+          if (!uniqueTypes.includes(asset.file_type)) {
+            uniqueTypes = [...uniqueTypes, asset.file_type].sort();
+            filterTypes.add(asset.file_type);
+            filterTypes = new Set(filterTypes);
+          }
+          applyFiltersAndSearch();
+          enqueuePeaks([asset]);
+        }));
+        // Analysis complete → patch just that asset in-place
+        unsubscribers.push(af.on('job:complete', (data: any) => {
+          if (data.result?.assetId) {
+            patchAsset(data.result.assetId, {
+              bpm: data.result.bpm,
+              key: data.result.key,
+              duration: data.result.durationSec,
+            });
+          }
+        }));
       }
     } catch (e: any) {
       error = e?.message || 'Failed to load assets';
@@ -178,6 +235,11 @@
       // Key filter — compare in short form so compatible-key buttons (short) match
       // assets stored in long form ("A minor" vs "Am")
       if (filterKey && formatKey(asset.key) !== formatKey(filterKey)) {
+        return false;
+      }
+
+      // Source filter
+      if (filterSource && (asset as any).source !== filterSource) {
         return false;
       }
 
@@ -459,7 +521,7 @@
       const af = (window as any).audioforge;
       assets = await af.files.list();
       applyFiltersAndSearch();
-      await loadPeaks(assets);
+      enqueuePeaks(assets);
     } catch (e) {
       console.error('Failed to reload assets after stem import:', e);
     }
@@ -494,8 +556,8 @@
     }
   }
 
-  // Calculate unanalyzed count (missing BPM or Key)
-  $: unanalyzedCount = assets ? assets.filter(a => !a.bpm || !a.key).length : 0;
+  // Count assets that have never been through the analysis pipeline
+  $: unanalyzedCount = assets ? assets.filter(a => !a.analyzed_at).length : 0;
 
   async function handleAnalyzeAll(): Promise<void> {
     if (analyzingAll) return;
@@ -551,7 +613,7 @@
 
       // Reload peaks for assets that now have them
       if (assets.length > 0) {
-        await loadPeaks(assets);
+        enqueuePeaks(assets);
       }
     } catch (e) {
       console.error('Failed to refresh assets after analysis:', e);
@@ -629,6 +691,20 @@
             <span>{type.toUpperCase()}</span>
           </label>
         {/each}
+      </div>
+
+      <div class="filter-section">
+        <div class="filter-title">Source</div>
+        <label class="checkbox-label">
+          <input type="radio" name="source" value="" bind:group={filterSource}
+            onchange={() => applyFiltersAndSearch()} />
+          <span>All</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="radio" name="source" value="youtube" bind:group={filterSource}
+            onchange={() => applyFiltersAndSearch()} />
+          <span>▶ YouTube</span>
+        </label>
       </div>
 
       <div class="filter-section">
@@ -990,7 +1066,8 @@
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .loading,
@@ -1036,7 +1113,7 @@
   }
 
   tbody {
-    overflow-y: auto;
+    overflow-y: visible;
   }
 
   tr {
