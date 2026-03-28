@@ -42,9 +42,9 @@ export function registerWatcherHandlers(
   }
 
   // Notify renderer when a file is auto-imported by the watcher
-  folderWatcherService.setOnFileAdded((assetId: number, filePath: string) => {
+  folderWatcherService.setOnFileAdded((asset) => {
     if (mainWindow) {
-      mainWindow.webContents.send('library:fileAdded', { assetId, filePath });
+      mainWindow.webContents.send('library:fileAdded', { asset });
     }
   });
 }

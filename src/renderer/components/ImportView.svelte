@@ -1,5 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+
+  interface WatchedFolder {
+    path: string;
+  }
+
+  interface ActivityEntry {
+    filePath: string;
+    timestamp: number;
+  }
 
   interface ImportedFile {
     jobId: string;
@@ -18,6 +27,14 @@
   let importedFiles: ImportedFile[] = [];
   let isDragging = false;
   let isAnalyzing = false;
+
+  // Watch folders state
+  let watchedFolders: WatchedFolder[] = [];
+  let watchActivity: ActivityEntry[] = [];
+  let watchError = '';
+  let watchUnsubscribers: Array<() => void> = [];
+
+  const af = (window as any).audioforge;
 
   const SUPPORTED_FORMATS = ['wav', 'mp3', 'flac', 'aiff', 'ogg', 'm4a', 'aac'];
 
@@ -163,8 +180,62 @@
     }
   }
 
-  onMount(() => {
+  async function loadWatchedFolders() {
+    try {
+      const paths: string[] = await af.watcher.getWatchedFolders();
+      watchedFolders = paths.map((p) => ({ path: p }));
+    } catch (e: any) {
+      watchError = e?.message ?? 'Failed to load watched folders';
+    }
+  }
+
+  async function handleAddWatchFolder() {
+    try {
+      const result = await af.files.showOpenDialog({
+        properties: ['openDirectory'],
+        title: 'Choose a folder to watch',
+      });
+      if (result.canceled || !result.filePaths?.length) return;
+      const folderPath: string = result.filePaths[0];
+      if (watchedFolders.some((f) => f.path === folderPath)) return;
+      await af.watcher.watchFolder(folderPath);
+      watchedFolders = [...watchedFolders, { path: folderPath }];
+    } catch (e: any) {
+      watchError = e?.message ?? 'Failed to add folder';
+    }
+  }
+
+  async function handleRemoveWatchFolder(folderPath: string) {
+    try {
+      await af.watcher.unwatchFolder(folderPath);
+      watchedFolders = watchedFolders.filter((f) => f.path !== folderPath);
+    } catch (e: any) {
+      watchError = e?.message ?? 'Failed to remove folder';
+    }
+  }
+
+  function formatWatchPath(fullPath: string): string {
+    const parts = fullPath.split('/').filter(Boolean);
+    if (parts.length <= 2) return fullPath;
+    return '…/' + parts.slice(-2).join('/');
+  }
+
+  onMount(async () => {
+    await loadWatchedFolders();
+
+    if (af?.on) {
+      watchUnsubscribers.push(
+        af.on('library:fileAdded', (data: { filePath: string }) => {
+          watchActivity = [{ filePath: data.filePath, timestamp: Date.now() }, ...watchActivity].slice(0, 50);
+        })
+      );
+    }
+
     return subscribeToJobUpdates();
+  });
+
+  onDestroy(() => {
+    watchUnsubscribers.forEach((u) => u());
   });
 </script>
 
@@ -172,6 +243,44 @@
   <div class="header">
     <h2>Import Audio Files</h2>
     <p class="subtitle">Add files to your library for automatic analysis</p>
+  </div>
+
+  <!-- Watch Folders -->
+  <div class="watch-section">
+    <div class="watch-header">
+      <div class="watch-header-left">
+        <span class="section-label">WATCH FOLDERS</span>
+        {#if watchedFolders.length > 0}
+          <span class="count-badge">{watchedFolders.length}</span>
+        {/if}
+        <span class="watch-hint">AudioForge monitors these folders and auto-imports new audio files</span>
+      </div>
+      <button class="add-watch-btn" on:click={handleAddWatchFolder}>+ Add Folder</button>
+    </div>
+
+    {#if watchError}
+      <div class="watch-error">{watchError}</div>
+    {/if}
+
+    {#if watchedFolders.length === 0}
+      <div class="watch-empty">No folders watched yet — click <strong>+ Add Folder</strong> to start</div>
+    {:else}
+      <div class="watch-folder-list">
+        {#each watchedFolders as folder (folder.path)}
+          <div class="watch-folder-row">
+            <span class="status-dot"></span>
+            <span class="watch-folder-path" title={folder.path}>{formatWatchPath(folder.path)}</span>
+            <span class="watch-folder-meta">Active · Recursive</span>
+            {#if watchActivity.find((a) => a.filePath.startsWith(folder.path))}
+              <span class="watch-activity-count">
+                {watchActivity.filter((a) => a.filePath.startsWith(folder.path)).length} file(s) detected
+              </span>
+            {/if}
+            <button class="watch-remove-btn" on:click={() => handleRemoveWatchFolder(folder.path)} title="Stop watching">✕</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   <div class="content">
@@ -300,6 +409,150 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+  }
+
+  /* Watch Folders */
+  .watch-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+
+  .watch-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .watch-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .count-badge {
+    background: rgba(100, 181, 246, 0.2);
+    color: #64b5f6;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .watch-hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .add-watch-btn {
+    padding: 5px 12px;
+    background: #64b5f6;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  .add-watch-btn:hover {
+    background: #7fc3f8;
+  }
+
+  .watch-error {
+    font-size: 12px;
+    color: #ef5350;
+    padding: 6px 10px;
+    background: rgba(239, 83, 80, 0.08);
+    border-radius: 5px;
+  }
+
+  .watch-empty {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.3);
+    padding: 8px 0;
+  }
+
+  .watch-folder-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .watch-folder-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #81c784;
+    flex-shrink: 0;
+    box-shadow: 0 0 4px rgba(129, 199, 132, 0.6);
+  }
+
+  .watch-folder-path {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .watch-folder-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+  }
+
+  .watch-activity-count {
+    font-size: 11px;
+    color: #81c784;
+    flex-shrink: 0;
+  }
+
+  .watch-remove-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 6px;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .watch-remove-btn:hover {
+    color: #ef5350;
+    border-color: rgba(239, 83, 80, 0.4);
+    background: rgba(239, 83, 80, 0.08);
   }
 
   /* Drop Zone */

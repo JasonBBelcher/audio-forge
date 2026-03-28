@@ -1,13 +1,14 @@
 import { watch, existsSync } from 'fs';
+import { readdir } from 'fs/promises';
 import { extname, join } from 'path';
-import type { FileService } from './file.service.js';
+import type { FileService, Asset } from './file.service.js';
 import type { AnalysisPipelineService } from './analysis-pipeline.service.js';
 
 const AUDIO_EXTENSIONS = new Set(['.wav', '.mp3', '.flac', '.aiff', '.ogg', '.m4a', '.aac']);
 
 export class FolderWatcherService {
   private watchers = new Map<string, ReturnType<typeof watch>>();
-  private onFileAdded?: (assetId: number, filePath: string) => void;
+  private onFileAdded?: (asset: Asset) => void;
 
   constructor(
     private fileService: FileService,
@@ -53,6 +54,47 @@ export class FolderWatcherService {
     });
 
     this.watchers.set(folderPath, watcher);
+
+    // Defer scan so it doesn't block app startup
+    setImmediate(() => {
+      this.scanExistingFiles(folderPath).catch((error) => {
+        console.error(`Error scanning folder ${folderPath}:`, error);
+      });
+    });
+  }
+
+  private async scanExistingFiles(folderPath: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(folderPath, { withFileTypes: true });
+    } catch {
+      return; // folder may have been removed or be inaccessible
+    }
+
+    const audioFiles: string[] = [];
+    const subdirs: string[] = [];
+
+    for (const entry of entries) {
+      const fullPath = join(folderPath, entry.name);
+      if (entry.isDirectory()) {
+        subdirs.push(fullPath);
+      } else if (entry.isFile() && AUDIO_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+        audioFiles.push(fullPath);
+      }
+    }
+
+    // Process audio files with a concurrency limit of 3 to avoid overwhelming the system
+    const CONCURRENCY = 3;
+    for (let i = 0; i < audioFiles.length; i += CONCURRENCY) {
+      await Promise.allSettled(
+        audioFiles.slice(i, i + CONCURRENCY).map((p) => this.processNewFile(p))
+      );
+    }
+
+    // Recurse into subdirectories sequentially to keep I/O manageable
+    for (const subdir of subdirs) {
+      await this.scanExistingFiles(subdir);
+    }
   }
 
   /**
@@ -86,7 +128,7 @@ export class FolderWatcherService {
   /**
    * Set callback for when a new file is imported.
    */
-  setOnFileAdded(cb: (assetId: number, filePath: string) => void): void {
+  setOnFileAdded(cb: (asset: Asset) => void): void {
     this.onFileAdded = cb;
   }
 
@@ -97,24 +139,20 @@ export class FolderWatcherService {
    * 3. Call the onFileAdded callback
    */
   private async processNewFile(filePath: string): Promise<void> {
-    // Skip if a file with the same name is already in the library
-    const filename = filePath.split('/').pop() ?? filePath;
-    const existing = this.fileService.listFiles();
-    const alreadyImported = existing.some((a) => {
-      const existingName = a.file_path.split('/').pop();
-      return existingName === filename;
-    });
-    if (alreadyImported) return;
+    // Skip if already in the library (check by path directly, not a full table scan)
+    if (this.fileService.findByFilePath(filePath)) return;
 
-    // Import the file into the library
+    // Import the file — fast: copy + DB insert only
     const asset = await this.fileService.importFile(filePath);
 
-    // Analyze the asset for metadata (BPM, key, duration)
-    await this.analysisPipelineService.analyzeAsset(asset.id, asset.file_path);
-
-    // Notify via callback if set
+    // Notify immediately so the file appears in the library right away
     if (this.onFileAdded) {
-      this.onFileAdded(asset.id, asset.file_path);
+      this.onFileAdded(asset);
     }
+
+    // Analyze in the background — don't block the scan loop
+    this.analysisPipelineService.analyzeAsset(asset.id, asset.file_path).catch((err) => {
+      console.error(`Analysis failed for ${filePath}:`, err);
+    });
   }
 }

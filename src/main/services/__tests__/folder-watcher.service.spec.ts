@@ -40,7 +40,7 @@ describe('FolderWatcherService', () => {
         file_size: 1000,
         created_at: new Date().toISOString(),
       }),
-      listFiles: vi.fn().mockReturnValue([]),
+      findByFilePath: vi.fn().mockReturnValue(false),
     };
 
     analysisPipelineService = {
@@ -456,17 +456,8 @@ describe('FolderWatcherService', () => {
         return mockWatcher;
       });
 
-      // Mock listFiles to return an asset with the same filename
-      (fileService.listFiles as any).mockReturnValue([
-        {
-          id: 999,
-          name: 'test.wav',
-          file_path: '/media/existing/test.wav',
-          file_type: 'wav',
-          file_size: 1000,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      // Mock findByFilePath to indicate file already exists
+      (fileService.findByFilePath as any).mockReturnValue(true);
 
       service.watchFolder(folderPath);
       watchCallback('rename', 'test.wav');
@@ -523,7 +514,9 @@ describe('FolderWatcherService', () => {
       vi.advanceTimersByTime(800);
       await vi.runAllTimersAsync();
 
-      expect(onFileAddedCallback).toHaveBeenCalledWith(1, '/media/test.wav');
+      expect(onFileAddedCallback).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1, file_path: '/media/test.wav' })
+      );
     });
 
     it('handles importFile errors gracefully', async () => {
