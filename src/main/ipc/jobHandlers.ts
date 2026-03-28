@@ -14,4 +14,8 @@ export function registerJobHandlers(ipcMain: IpcMain, queueService: QueueService
   ipcMain.handle('jobs:cancel', (_event, id: string) => {
     return queueService.cancel(id);
   });
+
+  ipcMain.handle('jobs:retry', (_event, id: string) => {
+    return queueService.retry(id);
+  });
 }

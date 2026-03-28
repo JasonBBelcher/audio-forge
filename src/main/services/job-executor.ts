@@ -20,6 +20,9 @@ export class JobExecutor {
   start(intervalMs = 2000): void {
     if (this.pollTimer) return;
 
+    // Reset any jobs orphaned by a previous app crash or restart
+    this.queue.resetOrphanedJobs();
+
     // Poll immediately first (fire and forget)
     void this.poll();
 
@@ -112,6 +115,7 @@ export class JobExecutor {
         this.queue.updateProgress(job.id, progress, stage);
         this.emit('job:progress', {
           jobId: job.id,
+          type: job.type,
           progress,
           stage,
         });
@@ -134,6 +138,7 @@ export class JobExecutor {
       this.queue.markCompleted(job.id, result);
       this.emit('job:complete', {
         jobId: job.id,
+        type: job.type,
         result,
       });
     } catch (error) {
@@ -144,6 +149,7 @@ export class JobExecutor {
         this.queue.markFailed(job.id, errorMessage);
         this.emit('job:failed', {
           jobId: job.id,
+          type: job.type,
           error: errorMessage,
         });
       }

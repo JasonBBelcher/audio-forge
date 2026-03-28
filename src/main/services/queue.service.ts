@@ -9,7 +9,12 @@ export type JobType =
   | 'upload-platform'
   | 'hardware-capture'
   | 'hardware-bounce'
-  | 'analyze-audio';
+  | 'analyze-audio'
+  | 'analyze-audio-all'
+  | 'generate-audio'
+  | 'install-model'
+  | 'audio-to-midi'
+  | 'install-basic-pitch';
 
 export interface Job {
   id: string;
@@ -43,6 +48,11 @@ const CONCURRENCY_LIMITS: Record<JobType, number> = {
   'hardware-capture': 1,
   'hardware-bounce': 2,
   'analyze-audio': 8,
+  'analyze-audio-all': 1,
+  'generate-audio': 1,
+  'install-model': 1,
+  'audio-to-midi': 1,
+  'install-basic-pitch': 1,
 };
 
 const TIMEOUT_DEFAULTS: Record<JobType, number> = {
@@ -54,6 +64,11 @@ const TIMEOUT_DEFAULTS: Record<JobType, number> = {
   'hardware-capture': 60 * 60 * 1000,
   'hardware-bounce': 10 * 60 * 1000,
   'analyze-audio': 5 * 60 * 1000,
+  'analyze-audio-all': 60 * 60 * 1000,
+  'generate-audio': 40 * 60 * 1000,  // 40 min: 30 min download + 10 min inference
+  'install-model': 60 * 60 * 1000,
+  'audio-to-midi': 10 * 60 * 1000,
+  'install-basic-pitch': 15 * 60 * 1000,
 };
 
 export class QueueService {
@@ -146,6 +161,13 @@ export class QueueService {
 
     this.updateRetriesStmt.run(id);
     this.updateStatusStmt.run('pending', id);
+  }
+
+  /** Reset any jobs that were left in 'running' state by a previous process crash/restart. */
+  resetOrphanedJobs(): void {
+    this.db.prepare(
+      "UPDATE jobs SET status = 'pending', progress = 0 WHERE status = 'running'"
+    ).run();
   }
 
   getConcurrencyLimit(type: JobType): number {
