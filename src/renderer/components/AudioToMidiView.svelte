@@ -304,27 +304,27 @@
       <div class="settings-title">Settings</div>
 
       <div class="setting-row">
-        <label>Onset Sensitivity</label>
+        <label for="onset-threshold">Onset Sensitivity</label>
         <div class="slider-row">
-          <input type="range" min="0.1" max="0.9" step="0.05"
+          <input id="onset-threshold" type="range" min="0.1" max="0.9" step="0.05"
             bind:value={onsetThreshold} disabled={isConverting} />
           <span class="val">{onsetThreshold.toFixed(2)}</span>
         </div>
       </div>
 
       <div class="setting-row">
-        <label>Frame Sensitivity</label>
+        <label for="frame-threshold">Frame Sensitivity</label>
         <div class="slider-row">
-          <input type="range" min="0.1" max="0.9" step="0.05"
+          <input id="frame-threshold" type="range" min="0.1" max="0.9" step="0.05"
             bind:value={frameThreshold} disabled={isConverting} />
           <span class="val">{frameThreshold.toFixed(2)}</span>
         </div>
       </div>
 
       <div class="setting-row">
-        <label>Min Note Length <span class="unit">ms</span></label>
+        <label for="min-note-length">Min Note Length <span class="unit">ms</span></label>
         <div class="slider-row">
-          <input type="range" min="10" max="200" step="5"
+          <input id="min-note-length" type="range" min="10" max="200" step="5"
             bind:value={minimumNoteLength} disabled={isConverting} />
           <span class="val">{minimumNoteLength}</span>
         </div>
@@ -332,13 +332,13 @@
 
       <div class="setting-row two-col">
         <div>
-          <label>Min Freq <span class="unit">Hz</span></label>
-          <input class="num-input" type="number" min="20" max="500" step="1"
+          <label for="min-freq">Min Freq <span class="unit">Hz</span></label>
+          <input id="min-freq" class="num-input" type="number" min="20" max="500" step="1"
             bind:value={minFreq} disabled={isConverting} />
         </div>
         <div>
-          <label>Max Freq <span class="unit">Hz</span></label>
-          <input class="num-input" type="number" min="200" max="8000" step="1"
+          <label for="max-freq">Max Freq <span class="unit">Hz</span></label>
+          <input id="max-freq" class="num-input" type="number" min="200" max="8000" step="1"
             bind:value={maxFreq} disabled={isConverting} />
         </div>
       </div>

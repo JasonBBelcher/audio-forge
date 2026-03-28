@@ -5,8 +5,8 @@
   const af = (window as any).audioforge;
 
   export let filePath: string = '';
-  export let padRef: string = '';
-  export let assetId: number = 0;
+  export const padRef: string = '';
+  export const assetId: number = 0;
 
   let waveContainer: HTMLDivElement;
   let beatCanvas: HTMLCanvasElement;
