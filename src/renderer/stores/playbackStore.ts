@@ -36,3 +36,11 @@ function createPlaybackStore() {
 }
 
 export const playbackStore = createPlaybackStore();
+
+/**
+ * Exclusive playback coordination.
+ * Holds the ID of the currently playing player (e.g. 'wave-editor', 'audio-preview').
+ * When a player starts, it claims ownership. Other players subscribe and stop
+ * if they are no longer the active player.
+ */
+export const activePlayer = writable<string | null>(null);

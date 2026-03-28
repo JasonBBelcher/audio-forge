@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { activePlayer } from '../stores/playbackStore';
 
   export let filePath: string = '';
   export let fileName: string = '';
@@ -37,9 +38,11 @@
         audioContext = new (window as any).AudioContext();
       }
 
-      // Fetch audio file
-      const response = await fetch(`file://${filePath}`);
-      const arrayBuffer = await response.arrayBuffer();
+      // Read file via IPC (main process has filesystem access; renderer can't fetch file:// in dev)
+      const af = (window as any).audioforge;
+      const buffer = await af.files.readAsArrayBuffer(filePath);
+      // buffer arrives as Uint8Array from IPC — wrap in a fresh ArrayBuffer for decodeAudioData
+      const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 
       // Decode audio data
       audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -125,8 +128,17 @@
     animationFrameId = requestAnimationFrame(updateTime);
   }
 
+  // Exclusive playback: stop AudioPreview when another player starts
+  const unsubPlayer = activePlayer.subscribe((id) => {
+    if (id !== null && id !== 'audio-preview' && isPlaying) {
+      stop();
+    }
+  });
+
   function play(): void {
     if (!audioBuffer) return;
+
+    activePlayer.set('audio-preview');
 
     if (isPaused) {
       // Resume from pause
@@ -223,6 +235,8 @@
   }
 
   onDestroy(() => {
+    unsubPlayer();
+
     // Stop playback
     if (sourceNode) {
       try {

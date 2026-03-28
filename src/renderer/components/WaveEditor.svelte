@@ -2,9 +2,12 @@
   import { onMount, onDestroy } from 'svelte';
   import WaveSurfer from 'wavesurfer.js';
   import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
+  import { activePlayer } from '../stores/playbackStore';
 
-  let filePath: string = '';
-  let fileName: string = '';
+  // Accept an initial file from the parent (e.g. clicking a file in the Library)
+  export let filePath: string = '';
+  export let fileName: string = '';
+
   let isPlaying: boolean = false;
   let currentTime: number = 0;
   let duration: number = 0;
@@ -61,6 +64,11 @@
       });
     }
 
+    // If a file was passed in as a prop (e.g. opened from the Library), load it
+    if (filePath) {
+      await loadFileFromPath(filePath, fileName || filePath.split('/').pop() || 'audio');
+    }
+
     return () => {
       if (wavesurfer) {
         wavesurfer.destroy();
@@ -68,11 +76,64 @@
     };
   });
 
+  // Exclusive playback: stop WaveEditor when another player starts
+  const unsubPlayer = activePlayer.subscribe((id) => {
+    if (id !== null && id !== 'wave-editor' && isPlaying && wavesurfer) {
+      wavesurfer.stop();
+    }
+  });
+
   onDestroy(() => {
+    unsubPlayer();
     if (wavesurfer) {
       wavesurfer.destroy();
     }
   });
+
+  /**
+   * Read a local file via IPC (main process) and return a blob: URL
+   * that WaveSurfer can safely fetch() from the renderer.
+   */
+  async function toBlobUrl(path: string): Promise<string> {
+    const af = (window as any).audioforge;
+    const buffer = await af.files.readAsArrayBuffer(path);
+    const ext = path.split('.').pop()?.toLowerCase() || 'wav';
+    const mimeMap: Record<string, string> = {
+      wav: 'audio/wav', mp3: 'audio/mpeg', flac: 'audio/flac',
+      aiff: 'audio/aiff', aif: 'audio/aiff', ogg: 'audio/ogg',
+      m4a: 'audio/mp4', aac: 'audio/aac',
+    };
+    const blob = new Blob([buffer], { type: mimeMap[ext] || 'audio/wav' });
+    return URL.createObjectURL(blob);
+  }
+
+  /** Core file-loading routine shared by the dialog picker and the Library-click path. */
+  async function loadFileFromPath(path: string, name: string) {
+    const af = (window as any).audioforge;
+    filePath = path;
+    fileName = name;
+    editHistory = [];
+    redoHistory = [];
+
+    try {
+      // Load metadata
+      const [durationVal, metadataVal] = await Promise.all([
+        af.audio.getDuration(path),
+        af.audio.getMetadata(path),
+      ]);
+
+      duration = durationVal;
+      metadata = metadataVal || {};
+
+      // Load audio into WaveSurfer via blob: URL (IPC reads the file in main process)
+      if (wavesurfer) {
+        const blobUrl = await toBlobUrl(path);
+        await wavesurfer.load(blobUrl);
+      }
+    } catch (error) {
+      console.error('Failed to load file:', error);
+    }
+  }
 
   async function handleOpenFile() {
     try {
@@ -89,28 +150,7 @@
       if (!result?.filePaths?.[0]) return;
 
       const newFilePath = result.filePaths[0];
-      filePath = newFilePath;
-      fileName = newFilePath.split('/').pop() || 'audio';
-      editHistory = [];
-      redoHistory = [];
-
-      // Load metadata
-      const [durationVal, metadataVal] = await Promise.all([
-        af.audio.getDuration(filePath),
-        af.audio.getMetadata(filePath),
-      ]);
-
-      duration = durationVal;
-      metadata = metadataVal || {};
-
-      // Load audio into WaveSurfer
-      const buffer = await af.files.readAsArrayBuffer(filePath);
-      const blob = new Blob([buffer], { type: 'audio/wav' });
-      const url = URL.createObjectURL(blob);
-
-      if (wavesurfer) {
-        await wavesurfer.load(url);
-      }
+      await loadFileFromPath(newFilePath, newFilePath.split('/').pop() || 'audio');
     } catch (error) {
       console.error('Failed to open file:', error);
     }
@@ -139,13 +179,10 @@
       filePath = newFilePath;
       fileName = filePath.split('/').pop() || 'audio';
 
-      // Reload waveform
-      const buffer = await af.files.readAsArrayBuffer(filePath);
-      const blob = new Blob([buffer], { type: 'audio/wav' });
-      const url = URL.createObjectURL(blob);
-
+      // Reload waveform via blob URL
       if (wavesurfer) {
-        await wavesurfer.load(url);
+        const blobUrl = await toBlobUrl(filePath);
+        await wavesurfer.load(blobUrl);
       }
 
       // Update metadata
@@ -258,11 +295,9 @@
 
     try {
       const af = (window as any).audioforge;
-      const buffer = await af.files.readAsArrayBuffer(filePath);
-      const blob = new Blob([buffer], { type: 'audio/wav' });
-      const url = URL.createObjectURL(blob);
+      const blobUrl = await toBlobUrl(filePath);
 
-      await wavesurfer.load(url);
+      await wavesurfer.load(blobUrl);
 
       // Update metadata
       const [durationVal, metadataVal] = await Promise.all([
@@ -286,6 +321,7 @@
 
   function handlePlay() {
     if (wavesurfer) {
+      activePlayer.set('wave-editor');
       wavesurfer.play();
     }
   }
@@ -293,6 +329,7 @@
   function handleStop() {
     if (wavesurfer) {
       wavesurfer.stop();
+      activePlayer.set(null);
     }
   }
 
