@@ -137,6 +137,33 @@ describe('FileService', () => {
     expect(drums.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('saves and returns waveform peaks', async () => {
+    const testFile = path.join(tmpDir, 'test.wav');
+    fs.writeFileSync(testFile, Buffer.alloc(100));
+
+    const asset = await fileService.importFile(testFile);
+    expect(asset.waveform_peaks).toBeUndefined();
+
+    const peaks = Array.from({ length: 80 }, (_, i) => i / 80);
+    fileService.updateWaveformPeaks(asset.id, peaks);
+
+    const updated = fileService.getFile(asset.id);
+    expect(updated?.waveform_peaks).toHaveLength(80);
+    expect(updated?.waveform_peaks![0]).toBeCloseTo(0);
+  });
+
+  it('includes cached waveform_peaks in listFiles', async () => {
+    const testFile = path.join(tmpDir, 'test.wav');
+    fs.writeFileSync(testFile, Buffer.alloc(100));
+
+    const asset = await fileService.importFile(testFile);
+    fileService.updateWaveformPeaks(asset.id, [0.1, 0.5, 0.9]);
+
+    const assets = fileService.listFiles();
+    const found = assets.find((a) => a.id === asset.id);
+    expect(found?.waveform_peaks).toEqual([0.1, 0.5, 0.9]);
+  });
+
   it('returns undefined for nonexistent file', () => {
     const file = fileService.getFile(99999);
     expect(file).toBeUndefined();

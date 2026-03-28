@@ -17,7 +17,7 @@ beforeAll(async () => {
   const status = await health.getStatus();
   ffmpegAvailable = status.tools.ffmpeg?.available ?? false;
   aubioAvailable = status.tools.aubio?.available ?? false;
-});
+}, 30000);
 
 async function createTestWav(filePath: string): Promise<void> {
   if (!ffmpegAvailable) return;
@@ -195,7 +195,7 @@ describe('MediaSyncService — alignRecordings', () => {
       fs.rmdirSync(outputDir);
       fs.rmdirSync(tempDir);
     } catch {}
-  });
+  }, 30000);
 });
 
 describe('MediaSyncService — autoSync', () => {

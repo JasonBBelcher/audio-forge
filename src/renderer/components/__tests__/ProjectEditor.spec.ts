@@ -57,6 +57,17 @@ describe('ProjectEditor Component', () => {
   beforeEach(() => {
     projectStore.setCurrentProject(testProject);
     playbackStore.reset?.();
+    // ProjectEditor accesses window.audioforge.settings.get on mount
+    (window as any).audioforge = {
+      settings: {
+        get: vi.fn().mockResolvedValue(false),
+        set: vi.fn().mockResolvedValue(undefined),
+        getAll: vi.fn().mockResolvedValue({}),
+      },
+      jobs: { list: vi.fn().mockResolvedValue([]) },
+      health: { getStatus: vi.fn().mockResolvedValue({ tools: [], system: { platform: 'darwin', arch: 'arm64', memory: { total: 0, used: 0 } } }) },
+      on: vi.fn().mockReturnValue(() => {}),
+    };
   });
 
   describe('Layout', () => {

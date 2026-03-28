@@ -30,7 +30,7 @@ describe('HealthService Integration (real system, no mocks)', () => {
     expect(Object.keys(status.tools).length).toBeGreaterThanOrEqual(6);
     expect(status.system.platform).toBe(process.platform);
     expect(status.system.memory).toBeGreaterThan(0);
-  });
+  }, 30000); // demucs --version starts Python — allow up to 30s
 
   it('handles multiple concurrent health checks', async () => {
     const health = new HealthService();
@@ -44,5 +44,5 @@ describe('HealthService Integration (real system, no mocks)', () => {
     // All should return consistent results
     expect(s1.system.platform).toBe(s2.system.platform);
     expect(s2.system.platform).toBe(s3.system.platform);
-  });
+  }, 60000); // 3 concurrent getStatus() calls × demucs Python start — allow 60s
 });

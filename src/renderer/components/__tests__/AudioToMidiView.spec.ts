@@ -104,13 +104,12 @@ describe('AudioToMidiView', () => {
       expect(screen.getByText('song.wav')).toBeTruthy();
     });
 
-    const libraryItem = screen.getByText('song.wav');
-    await fireEvent.click(libraryItem);
+    await fireEvent.click(screen.getByText('song.wav'));
 
-    // After selection, the file should appear in the selected area
+    // After selection the convert button should become enabled
     await waitFor(() => {
-      const selectedItems = screen.getAllByText('song.wav');
-      expect(selectedItems.length).toBeGreaterThanOrEqual(2); // library + selected
+      const convertBtn = screen.getByRole('button', { name: /Convert to MIDI/i });
+      expect((convertBtn as HTMLButtonElement).disabled).toBe(false);
     });
   });
 
@@ -168,113 +167,63 @@ describe('AudioToMidiView', () => {
     await fireEvent.click(libraryItem);
 
     await waitFor(() => {
-      const convertBtn = screen.getByText(/Convert to MIDI/) as HTMLButtonElement;
+      const convertBtn = screen.getByRole('button', { name: /Convert to MIDI/i }) as HTMLButtonElement;
       expect(convertBtn.disabled).toBe(false);
     });
   });
 
-  it('after conversion, shows MIDI path or note count in result', async () => {
-    mockAf.audioToMidi.convert.mockResolvedValue({
-      jobId: 'convert-job-456',
-    });
+  /** Select a library asset, click Convert, and fire the job:complete event */
+  async function triggerConversionResult(midiResult = {
+    midiPath: '/out/song/song_basic_pitch.mid',
+    noteCount: 42,
+    durationSec: 8.5,
+    estimatedTempo: 120,
+  }) {
+    // Wait for library to load then select file
+    await waitFor(() => expect(screen.getByText('song.wav')).toBeTruthy());
+    await fireEvent.click(screen.getByText('song.wav'));
 
-    const { rerender } = render(AudioToMidiView);
-
-    // Simulate selecting a file and converting
-    await waitFor(() => {
-      expect(screen.getByText('song.wav')).toBeTruthy();
-    });
-
-    const libraryItem = screen.getByText('song.wav');
-    await fireEvent.click(libraryItem);
-
-    // Trigger conversion
-    const convertBtn = screen.getByText(/Convert to MIDI/);
+    // Click Convert — this sets convertJobId inside the component
+    const convertBtn = screen.getByRole('button', { name: /Convert to MIDI/i });
     await fireEvent.click(convertBtn);
 
-    // Simulate job:complete event for conversion
-    const onCallback = mockAf.on.mock.calls.find(
-      (call: any) => call[0] === 'job:complete'
-    );
-    if (onCallback) {
-      onCallback[1]({
-        jobId: 'convert-job-456',
-        result: {
-          midiPath: '/out/song/song_basic_pitch.mid',
-          noteCount: 42,
-          durationSec: 8.5,
-          estimatedTempo: 120,
-        },
-      });
-    }
+    // Wait for convert IPC to be called (resolves with jobId, sets convertJobId)
+    await waitFor(() => expect(mockAf.audioToMidi.convert).toHaveBeenCalled());
 
-    rerender(AudioToMidiView, {});
-
-    // After conversion, result should be visible
+    // Fire job:complete with the matching jobId
     await waitFor(() => {
-      expect(screen.queryByText(/Conversion Complete/)).toBeTruthy();
+      const completeCall = mockAf.on.mock.calls.find((c: any) => c[0] === 'job:complete');
+      expect(completeCall).toBeTruthy();
+      completeCall[1]({ jobId: 'convert-job-456', result: midiResult });
+    });
+  }
+
+  it('after conversion, shows MIDI path or note count in result', async () => {
+    render(AudioToMidiView);
+    await triggerConversionResult();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Conversion Complete/)).toBeTruthy();
     });
   });
 
   it('after conversion, shows "Save to Library" button (calls af.files.import)', async () => {
-    const { rerender } = render(AudioToMidiView);
+    render(AudioToMidiView);
+    await triggerConversionResult();
 
-    // Simulate conversion completion
-    const onCallback = mockAf.on.mock.calls.find(
-      (call: any) => call[0] === 'job:complete'
-    );
-    if (onCallback) {
-      onCallback[1]({
-        jobId: 'convert-job-456',
-        result: {
-          midiPath: '/out/song/song_basic_pitch.mid',
-          noteCount: 42,
-          durationSec: 8.5,
-          estimatedTempo: 120,
-        },
-      });
-    }
+    await waitFor(() => expect(screen.getByText(/Save to Library/)).toBeTruthy());
 
-    rerender(AudioToMidiView, {});
-
-    await waitFor(() => {
-      expect(screen.getByText(/Save to Library/)).toBeTruthy();
-    });
-
-    const saveBtn = screen.getByText(/Save to Library/);
-    await fireEvent.click(saveBtn);
-
+    await fireEvent.click(screen.getByText(/Save to Library/));
     expect(mockAf.files.import).toHaveBeenCalledWith(['/out/song/song_basic_pitch.mid']);
   });
 
   it('after conversion, shows "Show in Finder" button (calls af.files.revealInFinder)', async () => {
-    const { rerender } = render(AudioToMidiView);
+    render(AudioToMidiView);
+    await triggerConversionResult();
 
-    // Simulate conversion completion
-    const onCallback = mockAf.on.mock.calls.find(
-      (call: any) => call[0] === 'job:complete'
-    );
-    if (onCallback) {
-      onCallback[1]({
-        jobId: 'convert-job-456',
-        result: {
-          midiPath: '/out/song/song_basic_pitch.mid',
-          noteCount: 42,
-          durationSec: 8.5,
-          estimatedTempo: 120,
-        },
-      });
-    }
+    await waitFor(() => expect(screen.getByText('Show in Finder')).toBeTruthy());
 
-    rerender(AudioToMidiView, {});
-
-    await waitFor(() => {
-      expect(screen.getByText('Show in Finder')).toBeTruthy();
-    });
-
-    const revealBtn = screen.getByText('Show in Finder');
-    await fireEvent.click(revealBtn);
-
+    await fireEvent.click(screen.getByText('Show in Finder'));
     expect(mockAf.files.revealInFinder).toHaveBeenCalledWith('/out/song/song_basic_pitch.mid');
   });
 
@@ -288,7 +237,7 @@ describe('AudioToMidiView', () => {
     const libraryItem = screen.getByText('song.wav');
     await fireEvent.click(libraryItem);
 
-    const convertBtn = screen.getByText(/Convert to MIDI/);
+    const convertBtn = screen.getByRole('button', { name: /Convert to MIDI/i });
     await fireEvent.click(convertBtn);
 
     await waitFor(() => {
@@ -302,46 +251,30 @@ describe('AudioToMidiView', () => {
   });
 
   it('shows error message when conversion fails', async () => {
-    const { rerender } = render(AudioToMidiView);
+    render(AudioToMidiView);
 
-    // Simulate conversion failure
-    const onCallback = mockAf.on.mock.calls.find(
-      (call: any) => call[0] === 'job:failed'
-    );
-    if (onCallback) {
-      onCallback[1]({
-        jobId: 'convert-job-456',
-        error: 'Conversion process timed out',
-      });
-    }
+    // Select file and click convert to set convertJobId
+    await waitFor(() => expect(screen.getByText('song.wav')).toBeTruthy());
+    await fireEvent.click(screen.getByText('song.wav'));
+    const convertBtn = screen.getByRole('button', { name: /Convert to MIDI/i });
+    await fireEvent.click(convertBtn);
+    await waitFor(() => expect(mockAf.audioToMidi.convert).toHaveBeenCalled());
 
-    rerender(AudioToMidiView, {});
+    // Fire job:failed with matching jobId
+    await waitFor(() => {
+      const failedCall = mockAf.on.mock.calls.find((c: any) => c[0] === 'job:failed');
+      expect(failedCall).toBeTruthy();
+      failedCall[1]({ jobId: 'convert-job-456', error: 'Conversion process timed out' });
+    });
 
     await waitFor(() => {
       expect(screen.getByText('Conversion process timed out')).toBeTruthy();
     });
   });
 
-  it('shows "Export as..." button to export MIDI file', async () => {
-    const { rerender } = render(AudioToMidiView);
-
-    // Simulate conversion completion
-    const onCallback = mockAf.on.mock.calls.find(
-      (call: any) => call[0] === 'job:complete'
-    );
-    if (onCallback) {
-      onCallback[1]({
-        jobId: 'convert-job-456',
-        result: {
-          midiPath: '/out/song/song_basic_pitch.mid',
-          noteCount: 42,
-          durationSec: 8.5,
-          estimatedTempo: 120,
-        },
-      });
-    }
-
-    rerender(AudioToMidiView, {});
+  it('shows "Export as…" button to export MIDI file', async () => {
+    render(AudioToMidiView);
+    await triggerConversionResult();
 
     await waitFor(() => {
       expect(screen.getByText('Export as…')).toBeTruthy();

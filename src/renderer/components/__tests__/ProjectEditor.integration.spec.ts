@@ -52,6 +52,22 @@ const testProject = {
 
 describe('ProjectEditor Integration - Navigation', () => {
   beforeEach(() => {
+    (window as any).audioforge = {
+      settings: {
+        get: vi.fn().mockResolvedValue(false),
+        set: vi.fn().mockResolvedValue(undefined),
+        getAll: vi.fn().mockResolvedValue({}),
+      },
+      jobs: { list: vi.fn().mockResolvedValue([]) },
+      health: {
+        getStatus: vi.fn().mockResolvedValue({
+          tools: [],
+          system: { platform: 'darwin', arch: 'arm64', memory: { total: 0, used: 0 } },
+        }),
+      },
+      files: { list: vi.fn().mockResolvedValue([]) },
+      on: vi.fn().mockReturnValue(() => {}),
+    };
     projectStore.setCurrentProject(testProject);
     playbackStore.reset?.();
     vi.clearAllMocks();

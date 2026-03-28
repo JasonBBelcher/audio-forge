@@ -13,8 +13,10 @@ describe('AudioService', () => {
 
   it('detects BPM using aubio', async () => {
     const { runProcess } = await import('../../../../src/main/utils/process-runner.js');
+    // aubio tempo outputs beat timestamps (seconds) one per line.
+    // Intervals of 0.5 s → avg interval = 0.5 → 60/0.5 = 120 BPM.
     vi.mocked(runProcess).mockResolvedValueOnce({
-      stdout: '120.5',
+      stdout: '0.500\n1.000\n1.500\n2.000\n2.500\n3.000',
       stderr: '',
       exitCode: 0,
     });
@@ -23,12 +25,15 @@ describe('AudioService', () => {
 
     expect(result.bpm).toBeDefined();
     expect(typeof result.bpm).toBe('number');
+    expect(result.bpm).toBe(120);
   });
 
   it('detects key using aubio', async () => {
     const { runProcess } = await import('../../../../src/main/utils/process-runner.js');
+    // aubio pitch outputs "timestamp hz" lines; service runs Krumhansl-Schmuckler.
+    // Repeated middle C (261.63 Hz) strongly biases toward C major.
     vi.mocked(runProcess).mockResolvedValueOnce({
-      stdout: 'C major',
+      stdout: '0.000 261.626\n0.011 261.626\n0.023 261.626\n0.034 261.626\n0.046 261.626',
       stderr: '',
       exitCode: 0,
     });

@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HealthService, ToolStatus, TOOL_INSTALLERS } from '../../../../src/main/services/health.service.js';
 
+// Mock runProcess so tests don't invoke real subprocesses (demucs starts Python
+// and can take 10+ seconds, causing timeouts in the unit test suite).
+vi.mock('../../../../src/main/utils/process-runner.js', () => ({
+  runProcess: vi.fn().mockResolvedValue({ stdout: '1.0.0', stderr: '', exitCode: 0 }),
+}));
+
 describe('HealthService', () => {
   let health: HealthService;
 
@@ -58,6 +64,10 @@ describe('HealthService', () => {
   });
 
   it('checkTool returns unavailable for nonexistent tool', async () => {
+    const { runProcess } = await import('../../../../src/main/utils/process-runner.js');
+    // Override default mock: simulate ENOENT for a tool that doesn't exist
+    vi.mocked(runProcess).mockRejectedValueOnce(new Error('spawn nonexistent-tool-xyz-999 ENOENT'));
+
     const result = await health.checkTool('nonexistent-tool-xyz-999');
 
     expect(result.available).toBe(false);

@@ -7,6 +7,25 @@ import { settingsStore } from '../../stores/settingsStore';
 
 describe('Settings Component', () => {
   beforeEach(() => {
+    (window as any).audioforge = {
+      settings: {
+        get: vi.fn().mockResolvedValue(false),
+        set: vi.fn().mockResolvedValue(undefined),
+        getAll: vi.fn().mockResolvedValue({}),
+      },
+      jobs: { list: vi.fn().mockResolvedValue([]) },
+      health: {
+        getStatus: vi.fn().mockResolvedValue({
+          tools: [],
+          system: { platform: 'darwin', arch: 'arm64', memory: { total: 0, used: 0 } },
+        }),
+        onInstallProgress: vi.fn().mockReturnValue(() => {}),
+        installTool: vi.fn().mockResolvedValue(undefined),
+        getPlatform: vi.fn().mockResolvedValue({ summary: 'Apple Silicon (arm64)' }),
+      },
+      files: { list: vi.fn().mockResolvedValue([]) },
+      on: vi.fn().mockReturnValue(() => {}),
+    };
     settingsStore.reset();
   });
 
