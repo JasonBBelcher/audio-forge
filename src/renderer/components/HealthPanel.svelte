@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
   interface ToolStatus {
     available: boolean;
@@ -19,26 +19,67 @@
 
   let phase: Phase = 'loading';
   let health: HealthStatus | null = null;
+  let refreshing = false;
   let errorMsg = '';
+  let unsubscribeUpdate: (() => void) | null = null;
+  let collapsed = localStorage.getItem('health-panel-collapsed') === 'true';
+  let installing: Record<string, boolean> = {};
+  let installError: Record<string, string> = {};
+
+  function toggleCollapsed() {
+    collapsed = !collapsed;
+    localStorage.setItem('health-panel-collapsed', String(collapsed));
+  }
+
+  async function installTool(name: string) {
+    const af = (window as any).audioforge;
+    installing = { ...installing, [name]: true };
+    installError = { ...installError, [name]: '' };
+    try {
+      const freshStatus = await af.health.installTool(name);
+      if (health) {
+        health = { ...health, tools: { ...health.tools, [name]: freshStatus } };
+      }
+    } catch (e: any) {
+      installError = { ...installError, [name]: e?.message ?? 'Installation failed' };
+    } finally {
+      installing = { ...installing, [name]: false };
+    }
+  }
 
   async function fetchHealth() {
     phase = 'loading';
     health = null;
+    const af = (window as any).audioforge;
     try {
-      const af = (window as any).audioforge;
       if (!af?.health) {
         phase = 'loaded';
         return;
       }
       health = await af.health.getStatus();
       phase = 'loaded';
+      // If a background refresh is running, show subtle indicator
+      refreshing = true;
     } catch (e: any) {
       errorMsg = e?.message ?? 'Unknown error';
       phase = 'error';
     }
   }
 
-  onMount(fetchHealth);
+  onMount(() => {
+    fetchHealth();
+    const af = (window as any).audioforge;
+    if (af?.on) {
+      unsubscribeUpdate = af.on('health:statusUpdate', (freshStatus: HealthStatus) => {
+        health = freshStatus;
+        refreshing = false;
+      });
+    }
+  });
+
+  onDestroy(() => {
+    unsubscribeUpdate?.();
+  });
 
   function formatMemory(bytes: number): string {
     return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
@@ -48,60 +89,78 @@
   $: availableCount = toolEntries.filter(([, s]) => s.available).length;
 </script>
 
-<div class="health-panel">
+<div class="health-panel" class:collapsed>
   <div class="panel-header">
-    <h3>System Health</h3>
-    {#if phase === 'loaded'}
+    <button class="collapse-btn" on:click={toggleCollapsed} aria-label={collapsed ? 'Expand' : 'Collapse'}>
+      <span class="chevron" class:open={!collapsed}>›</span>
+      <h3>System Health</h3>
+      {#if phase === 'loaded' && !collapsed && refreshing}
+        <span class="refreshing-dot" title="Refreshing…"></span>
+      {/if}
+    </button>
+    {#if !collapsed && phase === 'loaded'}
       <button class="refresh-btn" on:click={fetchHealth}>Refresh</button>
     {/if}
   </div>
 
-  {#if phase === 'loading'}
-    <div class="loading">
-      <span class="spinner"></span>
-      <span>Checking tools…</span>
-    </div>
-  {:else if phase === 'error'}
-    <div class="error-state">
-      <p class="error-msg">Health check error: {errorMsg}</p>
-      <button class="retry-btn" on:click={fetchHealth}>Retry</button>
-    </div>
-  {:else if health}
-    <div class="summary">
-      <span class="summary-text">{availableCount} / {toolEntries.length} tools available</span>
-    </div>
+  {#if !collapsed}
+    {#if phase === 'loading'}
+      <div class="loading">
+        <span class="spinner"></span>
+        <span>Checking tools…</span>
+      </div>
+    {:else if phase === 'error'}
+      <div class="error-state">
+        <p class="error-msg">Health check error: {errorMsg}</p>
+        <button class="retry-btn" on:click={fetchHealth}>Retry</button>
+      </div>
+    {:else if health}
+      <div class="summary">
+        <span class="summary-text">{availableCount} / {toolEntries.length} tools available</span>
+      </div>
 
-    <ul class="tool-list">
-      {#each toolEntries as [name, status]}
-        <li class="tool-row">
-          <span class="tool-name">{name}</span>
-          {#if status.available}
-            <span class="status-available">✓</span>
-            {#if status.version}
-              <span class="tool-version">{status.version}</span>
+      <ul class="tool-list">
+        {#each toolEntries as [name, status]}
+          <li class="tool-row">
+            <span class="tool-name">{name}</span>
+            {#if status.available}
+              <span class="status-available">✓</span>
+              {#if status.version}
+                <span class="tool-version">{status.version}</span>
+              {/if}
+            {:else if installing[name]}
+              <span class="status-installing">Installing…</span>
+            {:else}
+              <span class="status-unavailable">✗ not found</span>
+              <button class="install-btn" on:click={() => installTool(name)}>Install</button>
             {/if}
-          {:else}
-            <span class="status-unavailable">✗ not found</span>
-          {/if}
-        </li>
-      {/each}
-    </ul>
+            {#if installError[name]}
+              <span class="install-error" title={installError[name]}>⚠</span>
+            {/if}
+          </li>
+        {/each}
+      </ul>
 
-    <div class="system-info">
-      <span class="sys-item">Platform: <strong>{health.system.platform}</strong></span>
-      <span class="sys-item">Arch: <strong>{health.system.arch}</strong></span>
-      <span class="sys-item">RAM: <strong>{formatMemory(health.system.memory)}</strong></span>
-    </div>
+      <div class="system-info">
+        <span class="sys-item">Platform: <strong>{health.system.platform}</strong></span>
+        <span class="sys-item">Arch: <strong>{health.system.arch}</strong></span>
+        <span class="sys-item">RAM: <strong>{formatMemory(health.system.memory)}</strong></span>
+      </div>
+    {/if}
   {/if}
 </div>
 
 <style>
   .health-panel {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1.25rem;
-    color: #e0e0e0;
+    color: var(--text-primary);
+  }
+
+  .health-panel.collapsed {
+    padding-bottom: 0.25rem;
   }
 
   .panel-header {
@@ -111,11 +170,56 @@
     margin-bottom: 1rem;
   }
 
+  .health-panel.collapsed .panel-header {
+    margin-bottom: 0;
+  }
+
+  .collapse-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex: 1;
+    text-align: left;
+  }
+
+  .chevron {
+    display: inline-block;
+    font-size: 1.1rem;
+    color: #6060a0;
+    transform: rotate(90deg);
+    transition: transform 0.2s ease;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .chevron.open {
+    transform: rotate(-90deg);
+  }
+
   .panel-header h3 {
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
-    color: #c0c0d0;
+    color: var(--text-primary);
+  }
+
+  .refreshing-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #6366f1;
+    opacity: 0.7;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.9; }
   }
 
   .refresh-btn,
@@ -176,7 +280,7 @@
 
   .summary-text {
     font-size: 0.85rem;
-    color: #8080a0;
+    color: var(--text-secondary);
   }
 
   .tool-list {
@@ -200,7 +304,7 @@
   .tool-name {
     font-family: monospace;
     min-width: 90px;
-    color: #c0c0d0;
+    color: var(--text-primary);
   }
 
   .status-available {
@@ -212,6 +316,38 @@
   .status-unavailable {
     color: #f87171;
     font-size: 0.8rem;
+  }
+
+  .status-installing {
+    color: #a78bfa;
+    font-size: 0.8rem;
+    font-style: italic;
+  }
+
+  .install-btn {
+    margin-left: auto;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.75rem;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    border-radius: 4px;
+    color: #a5b4fc;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .install-btn:hover {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.7);
+    color: #c7d2fe;
+  }
+
+  .install-error {
+    color: #f87171;
+    font-size: 0.85rem;
+    cursor: help;
+    flex-shrink: 0;
   }
 
   .tool-version {

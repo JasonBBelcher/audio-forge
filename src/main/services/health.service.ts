@@ -71,7 +71,7 @@ export class HealthService {
   async checkTool(tool: string): Promise<ToolStatus> {
     const args = VERSION_ARGS[tool] ?? ['--version'];
     try {
-      const result = await runProcess(tool, args, { timeout: 5000 });
+      const result = await runProcess(tool, args, { timeout: 1500 });
       const output = result.stdout + result.stderr;
       const match = output.match(VERSION_REGEX);
       return {
