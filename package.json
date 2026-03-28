@@ -1,6 +1,6 @@
 {
   "name": "audioforge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Unified Music Production Platform",
   "main": "dist/main/main.cjs",
   "author": "Jason Belcher",
