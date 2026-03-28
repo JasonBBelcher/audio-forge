@@ -5,7 +5,6 @@
   import NewProjectModal from './NewProjectModal.svelte';
   import Settings from './Settings.svelte';
   import HealthPanel from './HealthPanel.svelte';
-  import JobsPanel from './JobsPanel.svelte';
   import { onMount } from 'svelte';
 
   let projects: Project[] = [];
@@ -66,7 +65,6 @@
   <main class="dashboard-main">
     <div class="sidebar">
       <HealthPanel />
-      <JobsPanel />
     </div>
     <section class="projects-section">
       <div class="section-header">
@@ -146,14 +144,14 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-    color: #e0e0e0;
+    background: var(--body-bg);
+    color: var(--text-primary);
   }
 
   .dashboard-header {
     padding: 2rem;
-    background: rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid var(--border);
     text-align: center;
   }
 
@@ -215,10 +213,10 @@
   .search-input {
     width: 100%;
     padding: 0.75rem 1rem;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
     border-radius: 8px;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font-size: 1rem;
     transition: all 0.2s;
     box-sizing: border-box;
@@ -226,12 +224,12 @@
 
   .search-input:focus {
     outline: none;
-    background: rgba(255, 255, 255, 0.1);
-    border-color: #6366f1;
+    background: var(--bg-card-hover);
+    border-color: var(--color-primary);
   }
 
   .search-input::placeholder {
-    color: #707080;
+    color: var(--text-muted);
   }
 
   .projects-grid {
@@ -244,7 +242,7 @@
     grid-column: 1 / -1;
     padding: 4rem 2rem;
     text-align: center;
-    color: #707080;
+    color: var(--text-muted);
   }
 
   .empty-icon {
@@ -259,14 +257,14 @@
   }
 
   .empty-sub {
-    color: #505060;
+    color: var(--text-muted);
     font-size: 0.95rem !important;
     margin-top: 0.5rem !important;
   }
 
   .project-card {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
     transition: all 0.2s;
@@ -277,10 +275,10 @@
   }
 
   .project-card:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-card-hover);
     border-color: rgba(99, 102, 241, 0.5);
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   }
 
   .card-header {
@@ -299,7 +297,7 @@
   .delete-btn {
     background: none;
     border: none;
-    color: #505060;
+    color: var(--text-muted);
     font-size: 1rem;
     cursor: pointer;
     padding: 0.2rem 0.4rem;
@@ -318,7 +316,7 @@
     flex-wrap: wrap;
     gap: 0.75rem;
     font-size: 0.85rem;
-    color: #a0a0a0;
+    color: var(--text-secondary);
   }
 
   .meta-item {
@@ -329,13 +327,13 @@
 
   .card-date {
     font-size: 0.8rem;
-    color: #505060;
+    color: var(--text-muted);
     margin-top: 0.25rem;
   }
 
   .open-hint {
     font-size: 0.8rem;
-    color: #6366f1;
+    color: var(--color-primary);
     text-align: right;
     margin-top: auto;
     padding-top: 0.5rem;
@@ -366,14 +364,14 @@
 
   .header-left p {
     margin: 0.25rem 0 0;
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 0.9rem;
   }
 
   .settings-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #a0a0a0;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
     padding: 0.5rem 1rem;
     border-radius: 6px;
     cursor: pointer;
@@ -383,8 +381,8 @@
   }
 
   .settings-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
   }
 
   .settings-overlay {
@@ -400,8 +398,8 @@
   .settings-panel {
     width: 360px;
     max-width: 90vw;
-    background: #1a1a2e;
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
     overflow-y: auto;
   }
 </style>

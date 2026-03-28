@@ -1,3 +1,4 @@
+/* ── Dark theme (default) ─────────────────────────────────────── */
 :root {
   --color-bg: #0f0f0f;
   --color-surface: #1a1a1a;
@@ -10,6 +11,53 @@
   --color-warning: #eab308;
   --color-error: #ef4444;
   --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Component-level tokens used throughout the app */
+  --bg-primary: #1e1e2e;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #252540;
+  --bg-hover: #2d2d50;
+  --bg-card: rgba(255, 255, 255, 0.05);
+  --bg-card-hover: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #606070;
+  --body-bg: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+  --body-color: #e0e0e0;
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --scrollbar-track: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Light theme ──────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --color-bg: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-border: #d1d1d6;
+  --color-text: #1c1c1e;
+  --color-text-secondary: #6c6c70;
+  --color-primary: #5856d6;
+  --color-primary-hover: #4745c8;
+  --color-success: #34c759;
+  --color-warning: #ff9500;
+  --color-error: #ff3b30;
+
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e5e5ea;
+  --bg-hover: #d1d1d6;
+  --bg-card: rgba(0, 0, 0, 0.04);
+  --bg-card-hover: rgba(0, 0, 0, 0.07);
+  --border: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.22);
+  --text-primary: #1c1c1e;
+  --text-secondary: #6c6c70;
+  --text-muted: #aeaeb2;
+  --body-bg: linear-gradient(135deg, #f0f0f8 0%, #e8e8f4 100%);
+  --body-color: #1c1c1e;
+  --input-bg: rgba(0, 0, 0, 0.04);
+  --scrollbar-track: rgba(0, 0, 0, 0.05);
 }
 
 * {
@@ -23,9 +71,10 @@ body {
     Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   margin: 0;
   padding: 0;
-  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-  color: #e0e0e0;
+  background: var(--body-bg);
+  color: var(--body-color);
   -webkit-font-smoothing: antialiased;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 ::-webkit-scrollbar {
@@ -34,7 +83,7 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {

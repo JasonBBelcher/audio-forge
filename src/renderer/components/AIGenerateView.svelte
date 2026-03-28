@@ -472,7 +472,8 @@
     padding: 24px;
     height: 100%;
     overflow-y: auto;
-    background: #0f0f1e;
+    background: var(--bg-primary);
+    color: var(--text-primary);
   }
 
   .header {
@@ -482,13 +483,13 @@
   .header h1 {
     font-size: 24px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--text-primary);
     margin: 0 0 4px 0;
   }
 
   .subtitle {
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary);
     margin: 0;
   }
 
@@ -514,7 +515,7 @@
   .model-header h3 {
     font-size: 14px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
     margin: 0;
   }
 
@@ -545,7 +546,7 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
   }
 
   .dot {
@@ -567,8 +568,8 @@
   }
 
   .generation-panel {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 20px;
   }
@@ -583,16 +584,16 @@
   .form-group label {
     font-size: 13px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
   }
 
   textarea,
   input[type="text"],
   input[type="range"] {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
     border-radius: 4px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
     font-family: inherit;
     font-size: 13px;
     padding: 8px 12px;
@@ -603,7 +604,7 @@
   input[type="text"]:focus {
     outline: none;
     border-color: #64b5f6;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-card-hover);
   }
 
   textarea:disabled,
@@ -621,7 +622,7 @@
 
   .char-count {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-muted);
     text-align: right;
   }
 
@@ -641,7 +642,7 @@
   .slider-group label {
     font-size: 13px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -654,7 +655,7 @@
 
   .range {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary);
     font-weight: 400;
   }
 
@@ -698,7 +699,7 @@
   .progress-bar {
     width: 100%;
     height: 6px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--border);
     border-radius: 3px;
     overflow: hidden;
     margin-bottom: 8px;
@@ -712,13 +713,13 @@
 
   .progress-text {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     text-align: center;
   }
 
   .generations-panel {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 20px;
   }
@@ -726,7 +727,7 @@
   .generations-panel h3 {
     font-size: 14px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
     margin: 0 0 16px 0;
   }
 
@@ -740,16 +741,16 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 12px;
     transition: all 0.2s ease;
   }
 
   .generation-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: var(--bg-card-hover);
+    border-color: var(--border-strong);
   }
 
   .gen-info {
@@ -764,7 +765,7 @@
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
   }
 
   .play-toggle-btn {
@@ -794,7 +795,7 @@
   .playback-bar-track {
     flex: 1;
     height: 3px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--border);
     border-radius: 2px;
     overflow: hidden;
   }
@@ -808,7 +809,7 @@
 
   .playback-time {
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
@@ -827,14 +828,14 @@
 
   .gen-time {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
   }
 
   .gen-meta {
     display: flex;
     gap: 12px;
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
   }
 
   .gen-duration {
