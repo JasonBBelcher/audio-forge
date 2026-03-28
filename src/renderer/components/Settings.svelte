@@ -86,6 +86,24 @@
     settingsStore.update({ autoDetectKey: (e.target as HTMLInputElement).checked });
   }
 
+  // ── HuggingFace token ─────────────────────────────────────────────────────
+  let hfToken = '';
+  let hfTokenVisible = false;
+  let hfTokenSaved = false;
+  let hfTokenSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  onMount(async () => {
+    hfToken = (await af.settings.get('hf.token', '')) ?? '';
+  });
+
+  async function handleHfTokenInput(e: Event) {
+    hfToken = (e.target as HTMLInputElement).value;
+    await af.settings.set('hf.token', hfToken);
+    if (hfTokenSaveTimer) clearTimeout(hfTokenSaveTimer);
+    hfTokenSaved = true;
+    hfTokenSaveTimer = setTimeout(() => { hfTokenSaved = false; }, 2000);
+  }
+
   function handleReset() {
     settingsStore.reset();
   }
@@ -181,6 +199,43 @@
       </div>
     </section>
     <section class="settings-section">
+      <h3>AI Models</h3>
+      <p class="dep-note">
+        Some AI models (like Stable Audio Open) are hosted on HuggingFace and may need a free
+        account token to download. You only need this once — the model is saved on your computer
+        after the first download.
+      </p>
+
+      <div class="setting-row hf-token-row">
+        <label for="hf-token">HuggingFace Token</label>
+        <div class="hf-token-input-wrap">
+          <input
+            id="hf-token"
+            type={hfTokenVisible ? 'text' : 'password'}
+            placeholder="hf_••••••••••••••••"
+            value={hfToken}
+            on:input={handleHfTokenInput}
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button
+            class="token-visibility-btn"
+            type="button"
+            on:click={() => (hfTokenVisible = !hfTokenVisible)}
+            aria-label={hfTokenVisible ? 'Hide token' : 'Show token'}
+          >{hfTokenVisible ? '🙈' : '👁'}</button>
+        </div>
+        {#if hfTokenSaved}
+          <span class="token-saved">Saved</span>
+        {/if}
+      </div>
+
+      <p class="hf-token-help">
+        Don't have a token? <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">Get one free at huggingface.co</a> — just sign up and click "New token".
+      </p>
+    </section>
+
+    <section class="settings-section">
       <h3>Dependencies</h3>
       <p class="dep-note">Optional CLI tools that power audio analysis and processing.</p>
 
@@ -231,8 +286,8 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: var(--bg-secondary, #1a1a2e);
-    color: var(--text-primary, #e0e0e0);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     font-family: inherit;
   }
 
@@ -241,7 +296,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border, #333);
+    border-bottom: 1px solid var(--border);
   }
 
   .settings-header h2 {
@@ -253,7 +308,7 @@
   .close-btn {
     background: none;
     border: none;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     font-size: 1.1rem;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
@@ -262,7 +317,7 @@
   }
 
   .close-btn:hover {
-    color: var(--text-primary, #e0e0e0);
+    color: var(--text-primary);
   }
 
   .settings-body {
@@ -280,7 +335,7 @@
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
   }
 
   .setting-row {
@@ -299,8 +354,8 @@
   .setting-row select {
     width: 120px;
     padding: 0.35rem 0.5rem;
-    background: var(--bg-tertiary, #252540);
-    border: 1px solid var(--border, #333);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
     border-radius: 4px;
     color: inherit;
     font-size: 0.9rem;
@@ -318,19 +373,19 @@
 
   .value-label {
     font-size: 0.8rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     min-width: 3ch;
   }
 
   .settings-footer {
     padding: 1rem 1.5rem;
-    border-top: 1px solid var(--border, #333);
+    border-top: 1px solid var(--border);
   }
 
   .reset-btn {
-    background: var(--bg-tertiary, #252540);
-    border: 1px solid var(--border, #333);
-    color: var(--text-secondary, #888);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
     padding: 0.5rem 1rem;
     border-radius: 4px;
     cursor: pointer;
@@ -340,18 +395,88 @@
 
   .reset-btn:hover {
     background: var(--bg-hover, #2d2d50);
-    color: var(--text-primary, #e0e0e0);
+    color: var(--text-primary);
+  }
+
+  .hf-token-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .hf-token-row label {
+    padding-top: 0.4rem;
+    min-width: 140px;
+  }
+
+  .hf-token-input-wrap {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 180px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .hf-token-input-wrap input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    padding: 0.35rem 0.5rem;
+    color: inherit;
+    font-size: 0.88rem;
+    font-family: monospace;
+    width: 0;
+  }
+
+  .token-visibility-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.9rem;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+
+  .token-visibility-btn:hover {
+    opacity: 1;
+  }
+
+  .token-saved {
+    font-size: 0.78rem;
+    color: #3fb950;
+    align-self: center;
+  }
+
+  .hf-token-help {
+    margin: 0.25rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+
+  .hf-token-help a {
+    color: #58a6ff;
+    text-decoration: none;
+  }
+
+  .hf-token-help a:hover {
+    text-decoration: underline;
   }
 
   .dep-note {
     margin: 0 0 0.75rem;
     font-size: 0.8rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
   }
 
   .dep-loading {
     font-size: 0.85rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
   }
 
   .dep-list {
@@ -369,7 +494,7 @@
 
   .dep-indicator {
     font-size: 0.75rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
   }
 
   .dep-indicator.ok {
@@ -388,7 +513,7 @@
 
   .dep-version {
     font-size: 0.75rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     font-family: monospace;
   }
 
@@ -421,8 +546,8 @@
   .dep-log {
     margin: 0 0 0.4rem 1.6rem;
     font-size: 0.72rem;
-    color: var(--text-secondary, #888);
-    background: var(--bg-tertiary, #252540);
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
     border-radius: 4px;
     padding: 0.4rem 0.6rem;
     max-height: 120px;
@@ -436,14 +561,14 @@
     padding: 0.25rem 0.65rem;
     font-size: 0.78rem;
     background: transparent;
-    border: 1px solid var(--border, #333);
+    border: 1px solid var(--border);
     border-radius: 4px;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.15s;
   }
 
   .refresh-btn:hover {
-    color: var(--text-primary, #e0e0e0);
+    color: var(--text-primary);
   }
 </style>

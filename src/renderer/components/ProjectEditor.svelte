@@ -25,7 +25,6 @@
   import CollectionsView from './CollectionsView.svelte';
   import MidiLibraryView from './MidiLibraryView.svelte';
   import AIGenerateView from './AIGenerateView.svelte';
-  import WatchFoldersView from './WatchFoldersView.svelte';
   import AudioToMidiView from './AudioToMidiView.svelte';
   import LoopDetectorPanel from './LoopDetectorPanel.svelte';
   import MasteringView from './MasteringView.svelte';
@@ -33,9 +32,10 @@
   import SP404KitBuilder from './SP404KitBuilder.svelte';
   import SP404CompanionView from './SP404CompanionView.svelte';
   import EMX1View from './EMX1View.svelte';
+  import Settings from './Settings.svelte';
+  import YouTubeView from './YouTubeView.svelte';
   import SetupWizard from './SetupWizard.svelte';
   import HealthPanel from './HealthPanel.svelte';
-  import JobsPanel from './JobsPanel.svelte';
   import WaveEditor from './WaveEditor.svelte';
   import AudioPreview from './AudioPreview.svelte';
   import { onMount, onDestroy } from 'svelte';
@@ -468,6 +468,8 @@
               <h2>SP-404 Companion</h2>
             {:else if activeView === 'emx1'}
               <h2>EMX-1 Electribe</h2>
+            {:else if activeView === 'youtube'}
+              <h2>▶ YouTube</h2>
             {:else if activeView === 'settings'}
               <h2>Settings</h2>
             {:else if activeView === 'wave-editor'}
@@ -478,16 +480,11 @@
               <h2>🎹 Audio → MIDI</h2>
             {:else if activeView === 'loop-detect'}
               <h2>🔁 Loop Detect</h2>
-            {:else if activeView === 'watch-folders'}
-              <h2>👁 Watch Folders</h2>
             {:else if activeView === 'mastering'}
               <h2>🎚 Mastering</h2>
             {/if}
           </div>
           <div class="top-bar-right">
-            <div class="panel-container">
-              <JobsPanel />
-            </div>
             <div class="panel-container">
               <HealthPanel />
             </div>
@@ -506,8 +503,6 @@
             <CollectionsView />
           {:else if activeView === 'ai-generate'}
             <AIGenerateView />
-          {:else if activeView === 'watch-folders'}
-            <WatchFoldersView />
           {:else if activeView === 'audio-to-midi'}
             <AudioToMidiView />
           {:else if activeView === 'loop-detect'}
@@ -522,14 +517,10 @@
             <SP404CompanionView />
           {:else if activeView === 'emx1'}
             <EMX1View />
+          {:else if activeView === 'youtube'}
+            <YouTubeView />
           {:else if activeView === 'settings'}
-            <div class="settings-view">
-              <HealthPanel />
-              <div class="audio-settings">
-                <h3>Audio Settings</h3>
-                <p>Audio configuration coming soon...</p>
-              </div>
-            </div>
+            <Settings on:close={() => (activeView = 'library')} />
           {:else if activeView === 'wave-editor'}
             <WaveEditor filePath={selectedFilePath || ''} fileName={selectedFileName || ''} />
           {/if}
@@ -569,8 +560,8 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-    color: #e0e0e0;
+    background: var(--body-bg);
+    color: var(--text-primary);
   }
 
   .editor-empty {
@@ -587,8 +578,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 1.5rem 2rem;
-    background: rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid var(--border);
   }
 
   .header-right {
@@ -628,7 +619,7 @@
   }
 
   .meta {
-    color: #a0a0a0;
+    color: var(--text-secondary);
     font-size: 0.9rem;
   }
 
@@ -658,8 +649,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
     gap: 16px;
   }
 
@@ -671,7 +662,7 @@
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
   }
 
   .top-bar-right {
