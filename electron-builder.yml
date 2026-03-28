@@ -6,7 +6,11 @@ directories:
 files:
   - dist/**/*
   - resources/**/*
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/@julusian/midi/**/*
 mac:
+  identity: null
   category: public.app-category.music
   target:
     - dmg
