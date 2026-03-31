@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
@@ -182,6 +182,11 @@ ipcMain.handle('youtube:download', async (_event, url: string, trackId: string, 
 });
 
 // ─── File IPC ─────────────────────────────────────────────────────────────────
+
+ipcMain.handle('shell:openExternal', (_event, url: string) => {
+  // Validate it's an http/https URL before opening
+  if (/^https?:\/\//.test(url)) shell.openExternal(url);
+});
 
 ipcMain.handle('files:showOpenDialog', async (_event, options: Electron.OpenDialogOptions) => {
   if (!mainWindow) return { canceled: true, filePaths: [] };

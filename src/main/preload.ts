@@ -319,6 +319,9 @@ const api = {
     importToLibrary: (discoveryId: number, options?: object) =>
       ipcRenderer.invoke('discovery:importToLibrary', { discoveryId, options }),
   },
+  shell: {
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  },
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);
     ipcRenderer.on(channel, handler);

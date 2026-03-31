@@ -204,16 +204,22 @@
         </div>
       </div>
 
-      <!-- YouTube Embed Player -->
-      <div class="youtube-embed">
-        <!-- svelte-ignore a11y_unknown_element -->
-        <webview
-          src="https://www.youtube.com/embed/{currentTrack.youtube_id}?autoplay=1"
-          title={currentTrack.title}
-          useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-          style="width:100%;height:100%;position:absolute;top:0;left:0;"
-        ></webview>
-      </div>
+      <!-- YouTube Preview -->
+      <button
+        class="youtube-preview"
+        on:click={() => af.shell.openExternal(`https://www.youtube.com/watch?v=${currentTrack.youtube_id}`)}
+        title="Watch on YouTube"
+      >
+        {#if currentTrack.thumbnail_url}
+          <img src={currentTrack.thumbnail_url} alt={currentTrack.title} class="preview-thumb" />
+        {:else}
+          <div class="preview-thumb preview-placeholder">🎵</div>
+        {/if}
+        <div class="preview-play-overlay">
+          <span class="play-icon">▶</span>
+          <span class="preview-label">Watch on YouTube</span>
+        </div>
+      </button>
 
       <!-- Action Buttons -->
       <div class="buttons">
@@ -384,22 +390,59 @@
     gap: 1.5rem;
   }
 
-  .youtube-embed {
+  .youtube-preview {
     position: relative;
     width: 100%;
-    padding-bottom: 56.25%; /* 16:9 */
     border-radius: 8px;
     overflow: hidden;
     background: #000;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: block;
   }
 
-  .youtube-embed iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
+  .youtube-preview:hover .preview-play-overlay {
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .preview-thumb {
     width: 100%;
-    height: 100%;
-    border: none;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+  }
+
+  .preview-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 4rem;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .preview-play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.35);
+    transition: background 0.2s;
+  }
+
+  .play-icon {
+    font-size: 3rem;
+    color: #fff;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));
+  }
+
+  .preview-label {
+    font-size: 0.85rem;
+    color: #eee;
+    letter-spacing: 0.5px;
   }
 
   .info {
