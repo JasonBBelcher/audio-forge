@@ -8,10 +8,16 @@ import { registerProcessingTools } from './tools-processing.js';
 import { registerPrompts } from './prompts.js';
 
 async function main() {
-  // Verify database connection
-  const db = getDb();
-  const assetCount = (db.prepare('SELECT COUNT(*) as count FROM assets WHERE deleted_at IS NULL').get() as { count: number }).count;
-  process.stderr.write(`Database connected: ${assetCount} assets found\n`);
+  // Try to connect to database
+  let assetCount = 0;
+  try {
+    const db = getDb();
+    assetCount = (db.prepare('SELECT COUNT(*) as count FROM assets WHERE deleted_at IS NULL').get() as { count: number }).count;
+    process.stderr.write(`Database connected: ${assetCount} assets found\n`);
+  } catch (err) {
+    process.stderr.write(`⚠️  Warning: AudioForge database not found. Run the AudioForge app first to create it.\n`);
+    process.stderr.write(`   Expected at: ~/Library/Application Support/audioforge/audioforge.db\n`);
+  }
 
   const server = new McpServer({
     name: SERVER_NAME,
