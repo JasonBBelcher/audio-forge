@@ -1,19 +1,30 @@
 import Database from 'better-sqlite3';
 import { DB_PATH } from './constants.js';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
+import { initializeDatabase } from './db-init.js';
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (db) return db;
 
-  if (!existsSync(DB_PATH)) {
-    throw new Error(`AudioForge database not found at: ${DB_PATH}`);
+  const isNewDatabase = !existsSync(DB_PATH);
+
+  // Create directory if needed
+  const dbDir = dirname(DB_PATH);
+  if (!existsSync(dbDir)) {
+    mkdirSync(dbDir, { recursive: true });
   }
 
   db = new Database(DB_PATH, { readonly: false });
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+
+  // Initialize schema if this is a new database
+  if (isNewDatabase) {
+    initializeDatabase(db);
+  }
 
   return db;
 }
