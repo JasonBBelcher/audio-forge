@@ -255,7 +255,7 @@
           class:active={showFavoritesOnly}
           on:click={() => (showFavoritesOnly = !showFavoritesOnly)}
         >
-          {showFavoritesOnly ? '⭐ Favorites Only' : 'Show All'}
+          {showFavoritesOnly ? 'Show All' : '⭐ Favorites'}
         </button>
       </div>
     </div>

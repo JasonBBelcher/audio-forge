@@ -1,5 +1,6 @@
 import { Database } from 'better-sqlite3';
 import { app } from 'electron';
+import * as fs from 'fs';
 import * as path from 'path';
 import { runProcess } from '../utils/process-runner.js';
 import { FileService } from './file.service.js';
@@ -146,12 +147,12 @@ export class DiscoveryService {
       VALUES (?, ?, ?, ?, ?, ?, ?, 'discovery', datetime('now'))
     `);
 
-    const fileInfo = await this.fileService.getFileInfo(filePath);
+    const fileSize = fs.statSync(filePath).size;
     const assetResult = stmt.run(
       discovery.title,
       filePath,
       'wav',
-      fileInfo.size,
+      fileSize,
       discovery.duration,
       discovery.bpm,
       discovery.key
@@ -186,11 +187,13 @@ export class DiscoveryService {
   }
 
   getHistory(limit: number = 100): Discovery[] {
-    return this.db.prepare('SELECT * FROM discoveries ORDER BY created_at DESC LIMIT ?').all(limit) as Discovery[];
+    const rows = this.db.prepare('SELECT * FROM discoveries ORDER BY created_at DESC LIMIT ?').all(limit) as any[];
+    return rows.map((r) => ({ ...r, is_favorite: r.is_favorite === 1 }));
   }
 
   getFavorites(): Discovery[] {
-    return this.db.prepare('SELECT * FROM discoveries WHERE is_favorite = 1 ORDER BY created_at DESC').all() as Discovery[];
+    const rows = this.db.prepare('SELECT * FROM discoveries WHERE is_favorite = 1 ORDER BY created_at DESC').all() as any[];
+    return rows.map((r) => ({ ...r, is_favorite: true }));
   }
 
   toggleFavorite(id: number): boolean {
@@ -459,10 +462,27 @@ export class DiscoveryService {
   }
 
   private async downloadDiscovery(discovery: Discovery): Promise<string> {
-    const youtubDir = path.join(app.getPath('userData'), 'media', 'youtube-discovery');
-    const outputTemplate = path.join(youtubDir, `${discovery.title}.%(ext)s`);
+    const youtubeDir = path.join(app.getPath('userData'), 'media', 'youtube-discovery');
+    fs.mkdirSync(youtubeDir, { recursive: true });
 
-    const args = ['-x', '--audio-format', 'wav', '--audio-quality', '0', '-o', outputTemplate, `https://www.youtube.com/watch?v=${discovery.youtube_id}`];
+    // Sanitize title for use as a filename
+    const safeName = discovery.title
+      .replace(/[/\\:*?"<>|]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 100);
+
+    const outputTemplate = path.join(youtubeDir, `${safeName}_${discovery.youtube_id}.%(ext)s`);
+    const expectedPath = path.join(youtubeDir, `${safeName}_${discovery.youtube_id}.wav`);
+
+    const args = [
+      '-x',
+      '--audio-format', 'wav',
+      '--audio-quality', '0',
+      '--no-playlist',
+      '-o', outputTemplate,
+      `https://www.youtube.com/watch?v=${discovery.youtube_id}`,
+    ];
 
     const result = await runProcess('yt-dlp', args, { timeout: 300000 });
 
@@ -470,11 +490,16 @@ export class DiscoveryService {
       throw new Error(`Download failed: ${result.stderr}`);
     }
 
-    const destMatch = result.stdout.match(/\[ExtractAudio\] Destination: (.+)/);
-    if (destMatch) {
+    // yt-dlp may report the destination in stdout; fall back to expected path
+    const destMatch = result.stdout.match(/(?:\[ExtractAudio\]|\[download\]) Destination: (.+\.wav)/);
+    if (destMatch && fs.existsSync(destMatch[1].trim())) {
       return destMatch[1].trim();
     }
 
-    throw new Error('Could not extract download path from yt-dlp output');
+    if (fs.existsSync(expectedPath)) {
+      return expectedPath;
+    }
+
+    throw new Error('Could not locate downloaded file');
   }
 }
