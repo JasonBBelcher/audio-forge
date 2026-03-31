@@ -138,8 +138,8 @@
   <!-- Filter Bar -->
   <div class="filter-bar">
     <div class="filter-group">
-      <label>Genre:</label>
-      <select bind:value={selectedGenres[0]}>
+      <label for="genre-select">Genre:</label>
+      <select id="genre-select" bind:value={selectedGenres[0]}>
         <option value="">Any</option>
         {#each genres as genre}
           <option value={genre}>{genre}</option>
@@ -148,8 +148,8 @@
     </div>
 
     <div class="filter-group">
-      <label>Max Views:</label>
-      <select bind:value={maxViews}>
+      <label for="max-views-select">Max Views:</label>
+      <select id="max-views-select" bind:value={maxViews}>
         <option value={undefined}>Any</option>
         <option value={100}>Deep Cut (&lt;100)</option>
         <option value={1000}>Forgotten (&lt;1K)</option>
@@ -206,13 +206,12 @@
 
       <!-- YouTube Embed Player -->
       <div class="youtube-embed">
-        <iframe
+        <!-- svelte-ignore a11y_unknown_element -->
+        <webview
           src="https://www.youtube.com/embed/{currentTrack.youtube_id}?autoplay=1"
           title={currentTrack.title}
-          allow="autoplay; encrypted-media; fullscreen"
-          allowfullscreen
-          frameborder="0"
-        ></iframe>
+          style="width:100%;height:100%;position:absolute;top:0;left:0;"
+        ></webview>
       </div>
 
       <!-- Action Buttons -->
@@ -266,7 +265,7 @@
 
     <div class="history-list">
       {#each getDisplayHistory().slice(0, 20) as item (item.id || item.youtube_id)}
-        <div
+        <button
           class="history-item"
           class:current={currentTrack?.youtube_id === item.youtube_id}
           on:click={() => (currentTrack = item)}
@@ -282,7 +281,7 @@
             {/if}
           </span>
           <span class="views">{formatViews(item.view_count)}</span>
-        </div>
+        </button>
       {/each}
     </div>
   </div>
@@ -533,6 +532,12 @@
     border-radius: 4px;
     cursor: pointer;
     transition: background 0.2s;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: inherit;
+    text-align: left;
+    font: inherit;
   }
 
   .history-item:hover {

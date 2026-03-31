@@ -149,6 +149,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // needed for IPC invoke in preload
+      webviewTag: true, // needed for YouTube embed in CrateDigger
     },
   });
 
