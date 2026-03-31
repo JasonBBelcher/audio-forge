@@ -210,6 +210,7 @@
         <webview
           src="https://www.youtube.com/embed/{currentTrack.youtube_id}?autoplay=1"
           title={currentTrack.title}
+          useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
           style="width:100%;height:100%;position:absolute;top:0;left:0;"
         ></webview>
       </div>
