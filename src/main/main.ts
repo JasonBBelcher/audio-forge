@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
@@ -333,6 +333,18 @@ function setupJobExecutor(window: BrowserWindow): void {
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Spoof Origin/Referer for YouTube embed requests so the player
+  // doesn't reject with Error 153 (video player configuration error).
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*.youtube.com/*', '*://*.googlevideo.com/*'] },
+    (details, callback) => {
+      const headers = { ...details.requestHeaders };
+      headers['Origin'] = 'https://www.youtube.com';
+      headers['Referer'] = 'https://www.youtube.com/';
+      callback({ requestHeaders: headers });
+    },
+  );
+
   createWindow();
   if (mainWindow) {
     setupJobExecutor(mainWindow);
