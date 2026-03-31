@@ -2,9 +2,23 @@ import { spawn } from 'child_process';
 import { createServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
+
+/** Poll until the built output file exists. */
+function waitForFile(filePath, { timeout = 30000, interval = 200 } = {}) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeout;
+    const check = () => {
+      if (existsSync(filePath)) return resolve();
+      if (Date.now() > deadline) return reject(new Error(`File not ready: ${filePath}`));
+      setTimeout(check, interval);
+    };
+    check();
+  });
+}
 
 async function startDev() {
   // 1. Start Vite dev server for the renderer
@@ -32,10 +46,13 @@ async function startDev() {
     { cwd: root, stdio: 'inherit', shell: true }
   );
 
-  // Wait for initial build
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  // 3. Wait for the compiled main entry to actually exist
+  // Note: vite.listen() already resolves when the server is bound, so no port polling needed.
+  console.log('Waiting for main process build...');
+  await waitForFile(path.join(root, 'dist/main/main.cjs'));
+  console.log('Ready — launching Electron');
 
-  // 3. Launch Electron
+  // 4. Launch Electron
   const electron = spawn(
     'npx',
     ['electron', 'dist/main/main.cjs'],

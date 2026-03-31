@@ -472,7 +472,7 @@
             {:else if activeView === 'youtube'}
               <h2>▶ YouTube</h2>
             {:else if activeView === 'samplette'}
-              <h2>🎲 Samplette</h2>
+              <h2>🎲 CrateDigger</h2>
             {:else if activeView === 'settings'}
               <h2>Settings</h2>
             {:else if activeView === 'wave-editor'}

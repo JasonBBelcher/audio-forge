@@ -179,6 +179,78 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    name: '009_discoveries',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS discoveries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          youtube_id TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          uploader TEXT,
+          upload_date TEXT,
+          duration REAL,
+          view_count INTEGER,
+          thumbnail_url TEXT,
+          description TEXT,
+          bpm REAL,
+          key TEXT,
+          time_signature TEXT,
+          genre TEXT,
+          style TEXT,
+          region TEXT,
+          year INTEGER,
+          label TEXT,
+          discovered_via TEXT NOT NULL DEFAULT 'random',
+          search_query TEXT,
+          notes TEXT,
+          is_favorite INTEGER NOT NULL DEFAULT 0,
+          listen_count INTEGER NOT NULL DEFAULT 0,
+          last_listened_at DATETIME,
+          asset_id INTEGER,
+          imported_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_discoveries_youtube_id ON discoveries(youtube_id);
+        CREATE INDEX IF NOT EXISTS idx_discoveries_is_favorite ON discoveries(is_favorite);
+        CREATE INDEX IF NOT EXISTS idx_discoveries_genre ON discoveries(genre);
+        CREATE INDEX IF NOT EXISTS idx_discoveries_bpm ON discoveries(bpm);
+        CREATE INDEX IF NOT EXISTS idx_discoveries_key ON discoveries(key);
+        CREATE INDEX IF NOT EXISTS idx_discoveries_created_at ON discoveries(created_at);
+
+        CREATE TABLE IF NOT EXISTS discovery_playlists (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS discovery_playlist_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          playlist_id INTEGER NOT NULL,
+          discovery_id INTEGER NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (playlist_id) REFERENCES discovery_playlists(id) ON DELETE CASCADE,
+          FOREIGN KEY (discovery_id) REFERENCES discoveries(id) ON DELETE CASCADE,
+          UNIQUE(playlist_id, discovery_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_dpi_playlist ON discovery_playlist_items(playlist_id, position);
+
+        CREATE TABLE IF NOT EXISTS discovery_presets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          filters TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    },
+  },
 ];
 
 export function runMigrations(db: DatabaseConnection): void {

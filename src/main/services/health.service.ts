@@ -30,6 +30,12 @@ export const TOOL_INSTALLERS: Record<string, PlatformInstallers> = {
     linux:  { command: 'apt-get', args: ['install', '-y', 'ffmpeg'] },
     win32:  { command: 'winget', args: ['install', 'Gyan.FFmpeg'] },
   },
+  // ffprobe ships with ffmpeg — install ffmpeg to get it
+  ffprobe: {
+    darwin: { command: 'brew', args: ['install', 'ffmpeg'] },
+    linux:  { command: 'apt-get', args: ['install', '-y', 'ffmpeg'] },
+    win32:  { command: 'winget', args: ['install', 'Gyan.FFmpeg'] },
+  },
   'yt-dlp': {
     darwin: { command: 'brew', args: ['install', 'yt-dlp'] },
     linux:  { command: 'pip3', args: ['install', 'yt-dlp'] },
@@ -60,9 +66,14 @@ const VERSION_ARGS: Record<string, string[]> = {
   ffprobe: ['-version'],
   'yt-dlp': ['--version'],
   sox: ['--version'],
-  demucs: ['--version'],
+  demucs: ['--help'],
   aubio: ['--version'],
   node: ['--version'],
+};
+
+// Per-tool timeouts (ms). demucs loads Python/ML deps and takes ~2s to start.
+const TOOL_TIMEOUTS: Record<string, number> = {
+  demucs: 5000,
 };
 
 const VERSION_REGEX = /(\d+\.\d+[\.\d]*)/;
@@ -70,8 +81,9 @@ const VERSION_REGEX = /(\d+\.\d+[\.\d]*)/;
 export class HealthService {
   async checkTool(tool: string): Promise<ToolStatus> {
     const args = VERSION_ARGS[tool] ?? ['--version'];
+    const timeout = TOOL_TIMEOUTS[tool] ?? 3000;
     try {
-      const result = await runProcess(tool, args, { timeout: 1500 });
+      const result = await runProcess(tool, args, { timeout });
       const output = result.stdout + result.stderr;
       const match = output.match(VERSION_REGEX);
       return {

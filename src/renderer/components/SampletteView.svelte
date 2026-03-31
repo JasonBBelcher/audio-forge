@@ -135,7 +135,7 @@
 
 <div class="samplette-view">
   <div class="header">
-    <h1>🎲 Samplette</h1>
+    <h1>🎲 CrateDigger</h1>
     <p class="subtitle">Digital Crate Digging</p>
   </div>
 
