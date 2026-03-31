@@ -5,6 +5,7 @@ import { getDb, closeDb } from './db.js';
 import { registerResources } from './resources.js';
 import { registerLibraryTools } from './tools-library.js';
 import { registerProcessingTools } from './tools-processing.js';
+import { registerDiscoveryTools } from './tools-discovery.js';
 import { registerPrompts } from './prompts.js';
 
 async function main() {
@@ -34,6 +35,7 @@ async function main() {
   registerResources(server);
   registerLibraryTools(server);
   registerProcessingTools(server);
+  await registerDiscoveryTools(server);
   registerPrompts(server);
 
   // Graceful shutdown

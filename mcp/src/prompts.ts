@@ -105,4 +105,54 @@ Provide recommendations for processing (normalization, mastering, etc.).`,
       },
     }] };
   });
+
+  server.prompt('crate_digger', { mood: z.string().optional(), genre: z.string().optional(), era: z.string().optional(), purpose: z.string().optional() }, async (args) => {
+    const { mood = 'obscure', genre, era, purpose = 'sampling' } = args;
+
+    return { messages: [{
+      role: 'user' as const,
+      content: {
+        type: 'text' as const,
+        text: `You are a digital crate digger on a sampling mission.
+
+Mission parameters:
+- Mood/Vibe: ${mood}
+- Genre: ${genre ?? 'Any'}
+- Era: ${era ?? 'Any'}
+- Purpose: ${purpose}
+
+Use discovery_roll with strategic filters to find obscure, interesting samples.
+For each discovery:
+1. Check if it has BPM/key metadata (analyze_audio if needed)
+2. Find harmonically compatible tracks using discovery_find_compatible
+3. Suggest sampling ideas and chop points
+4. Save favorites and organize into playlists
+
+Think like a producer — what makes a sample special? Rare synths, unique drums, interesting vocal textures, unexpected chord progressions.
+
+Start rolling! Use discovery_roll multiple times to explore different areas of the musical landscape.`,
+      },
+    }] };
+  });
+
+  server.prompt('sample_analyst', { discovery_id: z.string() }, async ({ discovery_id }) => {
+    return { messages: [{
+      role: 'user' as const,
+      content: {
+        type: 'text' as const,
+        text: `Analyze discovery ID ${discovery_id} for sampling potential.
+
+Use discovery tools to:
+1. Get full details of the track
+2. If not analyzed, run audio analysis (BPM, key detection)
+3. Find compatible harmonically
+4. Suggest breakdown points for chopping/looping
+5. Identify interesting elements to isolate (stems separation if needed)
+6. Rate the sample quality for beatmaking/production
+7. Provide storage and organization recommendations
+
+Focus on sampling potential — what makes this track usable in a beat?`,
+      },
+    }] };
+  });
 }
