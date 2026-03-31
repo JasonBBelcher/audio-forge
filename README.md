@@ -2,11 +2,24 @@
 
 **AudioForge** is a desktop app for producers and musicians who want powerful audio tools without the complexity of a full DAW. It runs on Mac, Windows, and Linux — built with Electron so it feels native on any machine.
 
-Whether you're chopping samples, converting audio to MIDI, mastering a track, or building kits for your SP-404 or Koala sampler, AudioForge brings it all into one place.
+Whether you're chopping samples, converting audio to MIDI, mastering a track, building kits for your SP-404 or Koala sampler, or digging for obscure records to sample — AudioForge brings it all into one place.
+
+> **v1.2.0** — Introduces **CrateDigger**, a digital crate-digging tool for discovering rare and obscure music on YouTube.
 
 ---
 
 ## What It Does
+
+### 🎲 CrateDigger *(new in v1.2.0)*
+Roll the dice and discover rare, obscure, and forgotten music — the digital equivalent of flipping through record crates. CrateDigger uses yt-dlp to search YouTube with randomized genre, region, and decade combinations weighted toward low-view-count results.
+
+- **Roll Dice** — generates a random search query from genre seeds (funk, soul, jazz, afrobeat, latin, disco, reggae, hip-hop, electronic, world), regional modifiers (Japanese, Brazilian, Turkish, Nigerian...), and decade filters
+- **Genre & view filters** — narrow your dig to a specific genre or limit to "deep cuts" (<100 views), "forgotten" (<1K), or "obscure" (<10K)
+- **Compact track card** — shows a clickable thumbnail, title, artist, duration, view count, and any detected BPM/key tags
+- **Favorites & history** — star tracks to save them, browse your full discovery history, toggle between all discoveries and favorites-only
+- **Import to Library** — downloads the audio via yt-dlp, converts to WAV, runs BPM and key analysis, and adds it to your library under the YouTube source filter
+- **Batch import** — paste a list of YouTube URLs to process multiple tracks at once
+- **Open on YouTube** — click any thumbnail to watch the full video in your default browser
 
 ### Audio Library
 Your entire sample library in one searchable, sortable view. Import WAV, MP3, FLAC, AIFF, OGG, M4A, or AAC files and AudioForge automatically analyzes each one for BPM and musical key using [aubio](https://aubio.org/). Waveform previews, tagging, and filtering by key, BPM range, or file type make it easy to find the right sound fast.
@@ -136,7 +149,7 @@ Requires Node.js 20+.
 | Waveform display | WaveSurfer.js |
 | MIDI playback | Tone.js |
 | Hardware MIDI | @julusian/midi |
-| YouTube download | yt-dlp |
+| YouTube download & crate digging | yt-dlp |
 
 ---
 
