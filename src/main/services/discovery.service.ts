@@ -144,7 +144,7 @@ export class DiscoveryService {
     // Insert into assets
     const stmt = this.db.prepare(`
       INSERT INTO assets (name, file_path, file_type, file_size, duration, bpm, key, source, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'discovery', datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'youtube', datetime('now'))
     `);
 
     const fileSize = fs.statSync(filePath).size;
