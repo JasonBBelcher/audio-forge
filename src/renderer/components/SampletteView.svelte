@@ -27,10 +27,6 @@
   let history: Discovery[] = [];
   let favorites: Discovery[] = [];
   let showFavoritesOnly = false;
-  let currentTime = 0;
-  let duration = 0;
-  let isPlaying = false;
-  let volume = 1;
   let selectedGenres: string[] = [];
   let maxViews: number | undefined;
   let showBatchImport = false;
@@ -172,18 +168,15 @@
     <BatchImportPanel on:import={(e) => handleBatchImport(e.detail.urls)} />
   {/if}
 
-  <!-- Now Playing -->
-  {#if currentTrack}
+  <!-- Now Playing / Loading / Empty -->
+  {#if phase === 'rolling'}
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Digging through the crates...</p>
+    </div>
+  {:else if currentTrack}
     <div class="now-playing">
       <div class="track-info">
-        <div class="thumbnail-container">
-          {#if currentTrack.thumbnail_url}
-            <img src={currentTrack.thumbnail_url} alt="thumbnail" class="thumbnail" />
-          {:else}
-            <div class="thumbnail-placeholder">🎵</div>
-          {/if}
-        </div>
-
         <div class="info">
           <h2>{currentTrack.title}</h2>
           <p class="artist">{currentTrack.uploader || 'Unknown Artist'}</p>
@@ -211,42 +204,34 @@
         </div>
       </div>
 
-      <!-- Player Controls -->
-      <div class="player-controls">
-        <div class="playback-bar">
-          <span class="time">{formatDuration(currentTime)}</span>
-          <div class="progress-container">
-            <div
-              class="progress-bar"
-              style="width: {duration > 0 ? (currentTime / duration) * 100 : 0}%"
-            />
-          </div>
-          <span class="time">{formatDuration(duration)}</span>
-        </div>
+      <!-- YouTube Embed Player -->
+      <div class="youtube-embed">
+        <iframe
+          src="https://www.youtube.com/embed/{currentTrack.youtube_id}?autoplay=1"
+          title={currentTrack.title}
+          allow="autoplay; encrypted-media; fullscreen"
+          allowfullscreen
+          frameborder="0"
+        ></iframe>
+      </div>
 
-        <div class="buttons">
-          <Button variant="primary" on:click={handleRollDice} disabled={phase === 'rolling'}>
-            {phase === 'rolling' ? 'Rolling...' : '🎲 Roll Dice'}
-          </Button>
+      <!-- Action Buttons -->
+      <div class="buttons">
+        <Button variant="primary" on:click={handleRollDice} disabled={phase === 'importing'}>
+          🎲 Roll Dice
+        </Button>
 
-          <button
-            on:click={handleToggleFavorite}
-            class="icon-btn"
-            title={currentTrack.is_favorite ? 'Remove favorite' : 'Add to favorites'}
-          >
-            {currentTrack.is_favorite ? '⭐' : '☆'}
-          </button>
+        <button
+          on:click={handleToggleFavorite}
+          class="icon-btn"
+          title={currentTrack.is_favorite ? 'Remove favorite' : 'Add to favorites'}
+        >
+          {currentTrack.is_favorite ? '⭐' : '☆'}
+        </button>
 
-          <Button variant="secondary" on:click={handleImportCurrent} disabled={phase === 'importing'}>
-            {phase === 'importing' ? 'Importing...' : '⬇️ Import to Library'}
-          </Button>
-        </div>
-
-        <div class="volume-control">
-          <label>🔊</label>
-          <input type="range" min="0" max="1" step="0.1" bind:value={volume} />
-          <span>{Math.round(volume * 100)}%</span>
-        </div>
+        <Button variant="secondary" on:click={handleImportCurrent} disabled={phase === 'importing'}>
+          {phase === 'importing' ? 'Importing...' : '⬇️ Import to Library'}
+        </Button>
       </div>
     </div>
   {:else}
@@ -360,6 +345,30 @@
     cursor: pointer;
   }
 
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 4rem;
+    color: #aaa;
+    font-size: 1rem;
+  }
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(100, 150, 255, 0.2);
+    border-top-color: #6496ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
   .now-playing {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -375,21 +384,22 @@
     gap: 1.5rem;
   }
 
-  .thumbnail-container {
-    flex-shrink: 0;
+  .youtube-embed {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* 16:9 */
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
   }
 
-  .thumbnail,
-  .thumbnail-placeholder {
-    width: 120px;
-    height: 120px;
-    border-radius: 8px;
-    object-fit: cover;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 3rem;
-    background: rgba(0, 0, 0, 0.3);
+  .youtube-embed iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
   }
 
   .info {
@@ -433,39 +443,6 @@
     line-height: 1.4;
   }
 
-  .player-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .playback-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .time {
-    font-size: 0.8rem;
-    color: #999;
-    min-width: 40px;
-  }
-
-  .progress-container {
-    flex: 1;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-    overflow: hidden;
-    cursor: pointer;
-  }
-
-  .progress-bar {
-    height: 100%;
-    background: #6496ff;
-    transition: width 0.1s linear;
-  }
-
   .buttons {
     display: flex;
     gap: 0.5rem;
@@ -485,23 +462,6 @@
 
   .icon-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-  }
-
-  .volume-control {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .volume-control input {
-    width: 120px;
-  }
-
-  .volume-control span {
-    min-width: 35px;
-    text-align: right;
-    font-size: 0.85rem;
-    color: #999;
   }
 
   .empty-state {
