@@ -176,17 +176,32 @@
     </div>
   {:else if currentTrack}
     <div class="now-playing">
-      <div class="track-info">
-        <div class="info">
-          <h2>{currentTrack.title}</h2>
-          <p class="artist">{currentTrack.uploader || 'Unknown Artist'}</p>
-          <p class="stats">
+      <!-- Compact track card -->
+      <div class="track-card">
+        <!-- Small thumbnail -->
+        <button
+          class="thumb-btn"
+          on:click={() => af.shell.openExternal(`https://www.youtube.com/watch?v=${currentTrack.youtube_id}`)}
+          title="Watch on YouTube"
+        >
+          {#if currentTrack.thumbnail_url}
+            <img src={currentTrack.thumbnail_url} alt={currentTrack.title} class="thumb" />
+          {:else}
+            <div class="thumb thumb-placeholder">🎵</div>
+          {/if}
+          <div class="thumb-overlay">▶</div>
+        </button>
+
+        <!-- Metadata -->
+        <div class="track-meta">
+          <h2 class="track-title">{currentTrack.title}</h2>
+          <p class="track-artist">{currentTrack.uploader || 'Unknown Artist'}</p>
+          <p class="track-stats">
             {formatDuration(currentTrack.duration)} •
             {formatViews(currentTrack.view_count)} views •
             {currentTrack.upload_date || '?'}
           </p>
-
-          <div class="metadata">
+          <div class="track-tags">
             {#if currentTrack.bpm}
               <span class="tag">BPM: {currentTrack.bpm}</span>
             {/if}
@@ -197,48 +212,29 @@
               <span class="tag">{currentTrack.genre}</span>
             {/if}
           </div>
+        </div>
 
-          {#if currentTrack.description}
-            <p class="description">{currentTrack.description.substring(0, 200)}...</p>
-          {/if}
+        <!-- Actions -->
+        <div class="track-actions">
+          <button
+            on:click={handleToggleFavorite}
+            class="icon-btn"
+            title={currentTrack.is_favorite ? 'Remove favorite' : 'Add to favorites'}
+          >
+            {currentTrack.is_favorite ? '⭐' : '☆'}
+          </button>
+          <Button variant="secondary" on:click={handleImportCurrent} disabled={phase === 'importing'}>
+            {phase === 'importing' ? 'Importing...' : '⬇ Import'}
+          </Button>
+          <Button variant="primary" on:click={handleRollDice} disabled={phase === 'importing'}>
+            🎲 Roll
+          </Button>
         </div>
       </div>
 
-      <!-- YouTube Preview -->
-      <button
-        class="youtube-preview"
-        on:click={() => af.shell.openExternal(`https://www.youtube.com/watch?v=${currentTrack.youtube_id}`)}
-        title="Watch on YouTube"
-      >
-        {#if currentTrack.thumbnail_url}
-          <img src={currentTrack.thumbnail_url} alt={currentTrack.title} class="preview-thumb" />
-        {:else}
-          <div class="preview-thumb preview-placeholder">🎵</div>
-        {/if}
-        <div class="preview-play-overlay">
-          <span class="play-icon">▶</span>
-          <span class="preview-label">Watch on YouTube</span>
-        </div>
-      </button>
-
-      <!-- Action Buttons -->
-      <div class="buttons">
-        <Button variant="primary" on:click={handleRollDice} disabled={phase === 'importing'}>
-          🎲 Roll Dice
-        </Button>
-
-        <button
-          on:click={handleToggleFavorite}
-          class="icon-btn"
-          title={currentTrack.is_favorite ? 'Remove favorite' : 'Add to favorites'}
-        >
-          {currentTrack.is_favorite ? '⭐' : '☆'}
-        </button>
-
-        <Button variant="secondary" on:click={handleImportCurrent} disabled={phase === 'importing'}>
-          {phase === 'importing' ? 'Importing...' : '⬇️ Import to Library'}
-        </Button>
-      </div>
+      {#if currentTrack.description}
+        <p class="description">{currentTrack.description.substring(0, 200)}...</p>
+      {/if}
     </div>
   {:else}
     <div class="empty-state">
@@ -379,110 +375,123 @@
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
-    padding: 1.5rem;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.75rem;
   }
 
-  .track-info {
+  .track-card {
     display: flex;
-    gap: 1.5rem;
+    align-items: center;
+    gap: 1rem;
   }
 
-  .youtube-preview {
+  /* Small thumbnail button */
+  .thumb-btn {
     position: relative;
-    width: 100%;
-    border-radius: 8px;
+    flex-shrink: 0;
+    width: 96px;
+    height: 96px;
+    border-radius: 6px;
     overflow: hidden;
     background: #000;
     border: none;
     cursor: pointer;
     padding: 0;
-    display: block;
   }
 
-  .youtube-preview:hover .preview-play-overlay {
-    background: rgba(0, 0, 0, 0.55);
-  }
-
-  .preview-thumb {
+  .thumb {
     width: 100%;
-    aspect-ratio: 16 / 9;
+    height: 100%;
     object-fit: cover;
     display: block;
   }
 
-  .preview-placeholder {
+  .thumb-placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 4rem;
+    font-size: 2rem;
     background: rgba(255, 255, 255, 0.05);
+    width: 100%;
+    height: 100%;
   }
 
-  .preview-play-overlay {
+  .thumb-overlay {
     position: absolute;
     inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    background: rgba(0, 0, 0, 0.35);
-    transition: background 0.2s;
-  }
-
-  .play-icon {
-    font-size: 3rem;
+    font-size: 1.5rem;
     color: #fff;
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7));
+    background: rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transition: opacity 0.15s;
   }
 
-  .preview-label {
-    font-size: 0.85rem;
-    color: #eee;
-    letter-spacing: 0.5px;
+  .thumb-btn:hover .thumb-overlay {
+    opacity: 1;
   }
 
-  .info {
+  /* Metadata column */
+  .track-meta {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
   }
 
-  .info h2 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.3rem;
+  .track-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .artist {
-    margin: 0 0 0.3rem 0;
+  .track-artist {
+    margin: 0;
+    font-size: 0.85rem;
     color: #aaa;
   }
 
-  .stats {
-    margin: 0 0 0.8rem 0;
-    font-size: 0.85rem;
-    color: #999;
+  .track-stats {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #888;
   }
 
-  .metadata {
+  .track-tags {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.4rem;
     flex-wrap: wrap;
-    margin-bottom: 0.8rem;
+    margin-top: 0.25rem;
   }
 
   .tag {
     background: rgba(100, 150, 255, 0.2);
-    padding: 0.2rem 0.5rem;
+    padding: 0.15rem 0.4rem;
     border-radius: 4px;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+  }
+
+  /* Actions column */
+  .track-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: stretch;
+    flex-shrink: 0;
   }
 
   .description {
     margin: 0;
-    font-size: 0.85rem;
-    color: #bbb;
+    font-size: 0.8rem;
+    color: #888;
     line-height: 1.4;
   }
 
