@@ -299,6 +299,26 @@ const api = {
     master: (params: object) => ipcRenderer.invoke('mastering:master', params),
     showSaveDialog: (inputPath: string) => ipcRenderer.invoke('mastering:showSaveDialog', inputPath),
   },
+  discovery: {
+    roll: (filters?: object) => ipcRenderer.invoke('discovery:roll', filters),
+    search: (query: string, filters?: object, limit?: number) =>
+      ipcRenderer.invoke('discovery:search', { query, filters, limit }),
+    batch: (urls: string[]) => ipcRenderer.invoke('discovery:batch', urls),
+    processUrl: (url: string) => ipcRenderer.invoke('discovery:processUrl', url),
+    getHistory: (limit?: number) => ipcRenderer.invoke('discovery:getHistory', limit),
+    getFavorites: () => ipcRenderer.invoke('discovery:getFavorites'),
+    toggleFavorite: (discoveryId: number) => ipcRenderer.invoke('discovery:toggleFavorite', discoveryId),
+    updateNotes: (discoveryId: number, notes: string) =>
+      ipcRenderer.invoke('discovery:updateNotes', { discoveryId, notes }),
+    createPlaylist: (name: string, description?: string) =>
+      ipcRenderer.invoke('discovery:createPlaylist', { name, description }),
+    listPlaylists: () => ipcRenderer.invoke('discovery:listPlaylists'),
+    addToPlaylist: (playlistId: number, discoveryId: number) =>
+      ipcRenderer.invoke('discovery:addToPlaylist', { playlistId, discoveryId }),
+    getPlaylistItems: (playlistId: number) => ipcRenderer.invoke('discovery:getPlaylistItems', playlistId),
+    importToLibrary: (discoveryId: number, options?: object) =>
+      ipcRenderer.invoke('discovery:importToLibrary', { discoveryId, options }),
+  },
   on: (channel: string, cb: (...args: unknown[]) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => cb(...args);
     ipcRenderer.on(channel, handler);

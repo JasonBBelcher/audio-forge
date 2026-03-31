@@ -34,6 +34,7 @@
   import EMX1View from './EMX1View.svelte';
   import Settings from './Settings.svelte';
   import YouTubeView from './YouTubeView.svelte';
+  import SampletteView from './SampletteView.svelte';
   import SetupWizard from './SetupWizard.svelte';
   import HealthPanel from './HealthPanel.svelte';
   import WaveEditor from './WaveEditor.svelte';
@@ -470,6 +471,8 @@
               <h2>EMX-1 Electribe</h2>
             {:else if activeView === 'youtube'}
               <h2>▶ YouTube</h2>
+            {:else if activeView === 'samplette'}
+              <h2>🎲 Samplette</h2>
             {:else if activeView === 'settings'}
               <h2>Settings</h2>
             {:else if activeView === 'wave-editor'}
@@ -519,6 +522,8 @@
             <EMX1View />
           {:else if activeView === 'youtube'}
             <YouTubeView />
+          {:else if activeView === 'samplette'}
+            <SampletteView />
           {:else if activeView === 'settings'}
             <Settings on:close={() => (activeView = 'library')} />
           {:else if activeView === 'wave-editor'}

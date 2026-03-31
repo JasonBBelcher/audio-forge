@@ -24,6 +24,7 @@
         { id: 'midi', label: 'MIDI Library', icon: '🎵' },
         { id: 'import', label: 'Import', icon: '⬇' },
         { id: 'youtube', label: 'YouTube', icon: '▶' },
+        { id: 'samplette', label: 'Samplette', icon: '🎲' },
       ],
     },
     {

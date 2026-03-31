@@ -60,6 +60,8 @@ import { SP404CompanionService } from './services/sp404-companion.service.js';
 import { registerSP404CompanionHandlers } from './ipc/sp404CompanionHandlers.js';
 import { SP404MidiService } from './services/sp404-midi.service.js';
 import { registerSP404MidiHandlers } from './ipc/sp404MidiHandlers.js';
+import { DiscoveryService } from './services/discovery.service.js';
+import { registerDiscoveryHandlers } from './ipc/discoveryHandlers.js';
 
 let mainWindow: BrowserWindow | null = null;
 const youtubeService = new YouTubeService();
@@ -99,6 +101,7 @@ const loopDetectorService = new LoopDetectorService();
 const masteringService = new MasteringService();
 const sp404CompanionService = new SP404CompanionService(db, audioService);
 const sp404MidiService = new SP404MidiService();
+const discoveryService = new DiscoveryService(db, fileService, audioService, camelotService);
 
 // Register service handlers
 registerProjectHandlers(ipcMain, projectService);
@@ -124,6 +127,7 @@ registerLoopHandlers(ipcMain, loopDetectorService);
 registerMasteringHandlers(ipcMain, masteringService, paths.media);
 registerSP404CompanionHandlers(ipcMain, sp404CompanionService, audioService, sp404Service, () => mainWindow?.webContents, sp404MidiService);
 registerSP404MidiHandlers(ipcMain, sp404MidiService, () => mainWindow?.webContents);
+registerDiscoveryHandlers(ipcMain, discoveryService);
 // Note: registerWatcherHandlers and registerMidiHandlers are called in createWindow() after mainWindow is set
 
 function ensureDir(dir: string) {
